@@ -43,13 +43,9 @@ target_link_libraries(console_calibration
   tool_point_calibration
 )
 
-
-#combined
 add_executable(tcp_orientation_calibration  src/tcp_orientation_calibration.cpp)
 add_dependencies(tcp_orientation_calibration ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(tcp_orientation_calibration  ${catkin_LIBRARIES}  ${CERES_LIBRARIES}  tool_point_calibration)
-
-
 
 #############
 ## Install ##
