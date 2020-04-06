@@ -2,7 +2,6 @@
 #include <tf/transform_listener.h>
 #include <ros/ros.h>
 #include <tf_conversions/tf_eigen.h>
-
 #include<Eigen/Dense>
 using namespace Eigen;
 using Eigen::MatrixXd;
@@ -50,13 +49,11 @@ int main(int argc, char** argv)
     }
     return 1;
   }
-
   // Create storage for user observations
   tool_point_calibration::Affine3dVector observations;
   observations.reserve(num_samples);
   std::string line;
   int count = 0;
-
   // While ros is ok and there are more counts to be done...
   while (ros::ok() && count < num_samples)
   {
@@ -104,7 +101,6 @@ int main(int argc, char** argv)
 
   for (int i=0; i<3; i++)
   {
-
     if(i ==0)
         ROS_INFO("First point: keep the TCP at same point where the translation calibration was done, press enter");
     else if(i ==1)
