@@ -5,10 +5,18 @@
 #include<Eigen/Dense>
 using namespace Eigen;
 using Eigen::MatrixXd;
-
+/**
+this node is used to calibrate the orientation of the tool point.
+it is an implementation of a paper entitled:
+Methods of Calibrating the Orientation of the Industrial Robot Tool[1].
+variables names are same as the ones used in the paper.
+-------------------
+[1]https://www.researchgate.net/publication/330247404_
+Methods_of_Calibrating_the_Orientation_of_the_Industrial_Robot_Tool
+**/
 int main(int argc, char** argv)
 {
-  ros::init(argc, argv, "console_tool_calibration");
+  ros::init(argc, argv, "tool_orientation_calibration");
   ros::NodeHandle pnh ("~");
   // Load user parmameters
   std::string base_frame, tool0_frame;
@@ -124,59 +132,58 @@ int main(int argc, char** argv)
       continue;
     }
   }
-  // here we have the three  transformation A0n_1st, A0n_2nd, A0n_3rd
-    Vector4d r0ns_n = {tcp_transl[0], tcp_transl[1], tcp_transl[2], 1}; //tool center popint vector from pkg_1
-    Vector4d rd_0 = A0n[0]*r0ns_n;
-    Vector4d r0ns_0 = rd_0;
-    //  point 2: calculate delat1 and then c11, c21, c31
-    Vector4d V1;//{ vx, vy, vz, 1};
-    V1 = A0n[1].inverse() * A0n[0] * r0ns_n; // r0ns_0 has been modified to r0ns_n
-    double term1 = ( V1(0) - r0ns_n(0) );
-    double term2 = ( V1(1) - r0ns_n(1) );
-    double term3 = ( V1(2) - r0ns_n(2) );
-    double delta1 = -1* sqrt( term1*term1 + term2*term2 + term3*term3);
-    double c11 = term1 / delta1;
-    double c21 = term2 / delta1;
-    double c31 = term3 / delta1;
-    ROS_INFO_STREAM(" delat1: "<< delta1);
-    std::cout<<"c11, c21, c31: "<< c11 << " "<< c21 << " " <<c31<<std::endl;
-    //  point 3: calculate delta2 and then c12, c22, c32
-     Vector4d V2; //={ vx, vy, vz, 1};
-     V2 = A0n[2].inverse() * A0n[0] * r0ns_n; // r0ns_0 has been modified to r0ns_n
-     term1 = ( V2(0) - r0ns_n(0) );
-     term2 = ( V2(1) - r0ns_n(1) );
-     term3 = ( V2(2) - r0ns_n(2) );
-     double delta2 = 1* sqrt(term1*term1 + term2*term2 + term3*term3);
-     double c12 = term1 / delta2;
-     double c22 = term2 / delta2;
-     double c32 = term3 / delta2;
-     ROS_INFO_STREAM(" delat2: "<< delta2);
-     std::cout<<"c21, c22, c23: "<< c12 << " "<< c22 << " " << c32 <<std::endl;
-     //calculate c31, c32, c33;  c13=k1.c33  && c23=k2.c33
-     double k1= (c21*c32 - c22*c31)/(c11*c22 - c21*c12);
-     double k2= (c12*c31 - c11*c31)/(c11*c22 - c21*c12);
-     double c33 = sqrt( 1 /(1+k1*k1+k2*k2) );
-     double c13 = k1* c33;
-     double c23 = k2* c33;
-     std::cout<<"c31, c32, c32: "<< c31 << " "<< c32 << " " <<c33<<std::endl;
-     // store rotation matrix and translation
-     Matrix3d Rot;
-              Rot << c11, c12, c13,
-                     c21, c22, c23,
-                     c31, c32, c33;
-     Vector3d transl= {r0ns_n(0), r0ns_n(1), r0ns_n(2)};
-     std::cout<<"Rot_matrix:\n "<< Rot <<std::endl;
-     std::cout<<"translation:\n "<< transl <<std::endl;
-     // build final transformation
-     //form rotation matrix using values of cs
-      Affine3d Anns;
-      Anns.matrix() << c11, c12, c13, r0ns_n(0),
-                     c21, c22, c23, r0ns_n(1),
-                     c31, c32, c33, r0ns_n(2),
-                       0,   0,   0,        1;
-      /// Converts an Eigen Affine3d into a tf Transform
-      tf::Pose TCP_pose;
-      tf::poseEigenToTF(Anns, TCP_pose);
-     ROS_INFO_STREAM(" Done !");
+  // vector containing the coordinates of the calibrated tool TCP in the Sn ≡ FLANGE coordinate system [1]
+  Vector4d r0ns_n = {tcp_transl[0], tcp_transl[1], tcp_transl[2], 1};
+  // vector of the top of the pointed tip attached to the robot's working space [1]
+  Vector4d rd_0 = A0n[0]*r0ns_n;
+  Vector4d r0ns_0 = rd_0; 
+  //  point 2: calculate delat1 and then c11, c21, c31
+  Vector4d V1;//{ vx, vy, vz, 1};
+  V1 = A0n[1].inverse() * A0n[0] * r0ns_n; // r0ns_0 has been modified to r0ns_n 
+  double term1 = ( V1(0) - r0ns_n(0) );
+  double term2 = ( V1(1) - r0ns_n(1) );
+  double term3 = ( V1(2) - r0ns_n(2) );
+  double delta1 = -1* sqrt( term1*term1 + term2*term2 + term3*term3);
+  double c11 = term1 / delta1;
+  double c21 = term2 / delta1;
+  double c31 = term3 / delta1;
+  ROS_INFO_STREAM(" delat1: ", delta1);
+  ROS_INFO_STREAM("c11: "<< c11 << ", c21: "<< c21 << ", c31: "<<c31);
+  //  point 3: calculate delta2 and then c12, c22, c32
+  Vector4d V2; //={ vx, vy, vz, 1};
+  V2 = A0n[2].inverse() * A0n[0] * r0ns_n; // r0ns_0 has been modified to r0ns_n
+  term1 = ( V2(0) - r0ns_n(0) );
+  term2 = ( V2(1) - r0ns_n(1) );
+  term3 = ( V2(2) - r0ns_n(2) );
+  double delta2 = 1* sqrt(term1*term1 + term2*term2 + term3*term3);
+  double c12 = term1 / delta2;
+  double c22 = term2 / delta2;
+  double c32 = term3 / delta2;
+  ROS_INFO_STREAM(" delat2: "<< delta2);
+  ROS_INFO_STREAM("c21: "<< c21 << " ,c22: "<< c22 << ", c23: " << c23);
+  //calculate c31, c32, c33;  c13=k1.c33  && c23=k2.c33
+  double k1= (c21*c32 - c22*c31)/(c11*c22 - c21*c12);
+  double k2= (c12*c31 - c11*c31)/(c11*c22 - c21*c12);
+  double c33 = sqrt( 1 /(1+k1*k1+k2*k2) );
+  double c13 = k1* c33;
+  double c23 = k2* c33;
+  ROS_INFO_STREAM("c31: "<< c31 << ", c32: " c32 << ", c33: " << c33);
+  // store rotation matrix and translation
+  Matrix3d Rot;
+           Rot << c11, c12, c13,
+                  c21, c22, c23,
+                  c31, c32, c33;
+  Vector3d transl= {r0ns_n(0), r0ns_n(1), r0ns_n(2)};
+  // std::cout<<"Rot_matrix:\n "<< Rot <<std::endl;
+  ROS_INFO_STREAM("Rot_matrix:\n "<< Rot);
+  ROS_INFO_STREAM("translation:\n "<< transl);
+  // build final transformation
+  // form rotation matrix using values of cs
+  Affine3d Anns;
+  Anns.matrix() << c11, c12, c13, r0ns_n(0),
+                   c21, c22, c23, r0ns_n(1),
+                   c31, c32, c33, r0ns_n(2),
+                     0,   0,   0,        1;
+  ROS_INFO_STREAM(" Done !");
   return 0;
 }
