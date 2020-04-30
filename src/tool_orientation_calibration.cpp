@@ -62,6 +62,7 @@ int main(int argc, char** argv)
   observations.reserve(num_samples);
   std::string line;
   int count = 0;
+  Eigen::Isometry3d eigen_pose;
   // While ros is ok and there are more counts to be done...
   while (ros::ok() && count < num_samples)
   {
@@ -73,7 +74,6 @@ int main(int argc, char** argv)
     {
       listener.lookupTransform(base_frame, tool0_frame,
                                ros::Time(0), transform);
-      Eigen::Isometry3d eigen_pose;
       tf::poseTFToEigen(transform, eigen_pose);
       observations.push_back(eigen_pose);
       ROS_INFO_STREAM("Pose " << count << ": captured transform:\n" << eigen_pose.matrix());
@@ -106,11 +106,11 @@ int main(int argc, char** argv)
   ROS_INFO("=======\n step 2: TCP Orientation calibration using three point method ========== ");
   std::vector<Isometry3d> A0n; // to store the transformation matrix for the points
   A0n.resize( 3);
-  A0n[i] = eigen_pose;
+  A0n[0] = eigen_pose;
   ROS_INFO("the current pose is considered as the First point ... ");
   for (int i=1; i<3; i++)
   {
-    else if(i ==1)
+    if(i ==1)
         ROS_INFO("Second point: move the TCP to any location along the X axis of the tool and press enter");
     else
         ROS_INFO("Third Point: move TCP to any location along the Y axis of the tool and press enter.");
