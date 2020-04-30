@@ -7,7 +7,7 @@ The core tcp calibration library only requires the non-linear optimization solve
 The console calibration utility uses ROS' TF libraries.
 
 ## Use
-To use:
+### tool_point_calibration:
   1. Start up your robots driver as normal. A node like `robot_state_publisher` should be publishing TF frames of your robot.
 
   2. Identify a base frame, either the base frame of the robot or the origin of the scene. This will be used for TF lookups, and the `touch point` will be reported in this frame.
@@ -26,3 +26,26 @@ To use:
   6. Repeat step 5 at least three more times. Each time approach the fixed point in the world from a different orientation. If you wish to abort early, control-C the node.
 
   7. When you've captured all of the required points, the calibration will be automatically run and the output displayed to the screen.
+
+
+### tool_orientation_calibration:
+  1. repeat the first three steps in the case of tool_point_calibration.
+
+  2. Run the orientation node:
+  ```
+  roslaunch tool_point_calibration orientation_calibration.launch base_frame:=YOUR_BASE_FRAME tool0_frame:=YOUR_TOOL0_FRAME num_samples:=NUMBER_OF_TOUCH_POINTS
+  ```
+  By default base frame is `base_frame`, tool0_frame is `tool0`, and num_samples is `4`. I recommend you use at least 4
+  samples.
+
+  3. Repeat steps 5,6,7 of the tool_point_calibration case.
+ 
+  4. The last pose that has been used for translational calibration will be automatically saved as the first poin for the orientation calibration, two more points are requied.
+
+  5. Jog the robot in such away that the TCP moves to any location along the X axis of the tool and press enter.
+
+  6. Jog the robot in such away that the TCP moves to any location along the Y axis of the tool and press enter.
+
+
+  7. When you've captured all of the required points, the orientation calibration will be automatically run and the output displayed to the screen.
+  
