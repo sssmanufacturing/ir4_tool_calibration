@@ -8,7 +8,7 @@
  */
 struct ToolPointEstimator
 {
-  ToolPointEstimator(const Eigen::Affine3d& robot_pose)
+  ToolPointEstimator(const Eigen::Isometry3d& robot_pose)
   {
       ceres::RotationMatrixToAngleAxis(robot_pose.rotation().data(), angle_axis_);
       translation_[0] = robot_pose.translation()(0);
@@ -48,7 +48,7 @@ struct ToolPointEstimator
 
 
 tool_point_calibration::TcpCalibrationResult
-tool_point_calibration::calibrateTcp(const tool_point_calibration::Affine3dVector &tool_poses,
+tool_point_calibration::calibrateTcp(const tool_point_calibration::Isometry3dVector &tool_poses,
                                      const Eigen::Vector3d &tcp_guess,
                                      const Eigen::Vector3d &touch_pt_guess)
 {
