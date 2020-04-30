@@ -55,7 +55,7 @@ int main(int argc, char** argv)
   }
 
   // Create storage for user observations
-  tool_point_calibration::Affine3dVector observations;
+  tool_point_calibration::Isometry3dVector observations;
   observations.reserve(num_samples);
 
   std::string line;
@@ -75,7 +75,7 @@ int main(int argc, char** argv)
       listener.lookupTransform(base_frame, tool0_frame, 
                                ros::Time(0), transform);
 
-      Eigen::Affine3d eigen_pose;
+      Eigen::Isometry3d eigen_pose;
       tf::poseTFToEigen(transform, eigen_pose);
 
       observations.push_back(eigen_pose);
