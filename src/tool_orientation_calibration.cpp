@@ -58,7 +58,7 @@ int main(int argc, char** argv)
     return 1;
   }
   // Create storage for user observations
-  tool_point_calibration::Affine3dVector observations;
+  tool_point_calibration::Isometry3dVector observations;
   observations.reserve(num_samples);
   std::string line;
   int count = 0;
@@ -73,7 +73,7 @@ int main(int argc, char** argv)
     {
       listener.lookupTransform(base_frame, tool0_frame,
                                ros::Time(0), transform);
-      Eigen::Affine3d eigen_pose;
+      Eigen::Isometry3d eigen_pose;
       tf::poseTFToEigen(transform, eigen_pose);
       observations.push_back(eigen_pose);
       ROS_INFO_STREAM("Pose " << count << ": captured transform:\n" << eigen_pose.matrix());
@@ -104,7 +104,7 @@ int main(int argc, char** argv)
              " to try with more points");
   }
   ROS_INFO("=======\n step 2: TCP Orientation calibration using three point method ========== ");
-  std::vector<Affine3d> A0n; // to store the transformation matrix for the points
+  std::vector<Isometry3d> A0n; // to store the transformation matrix for the points
   A0n.resize( 3);
 
   for (int i=0; i<3; i++)
@@ -120,9 +120,9 @@ int main(int argc, char** argv)
     try
     {
       listener.lookupTransform(base_frame, tool0_frame, ros::Time(0), transform);
-      Eigen::Affine3d eigen_pose;
-      tf::poseTFToEigen(transform, eigen_pose); // convert transform to Affine3d
-      A0n[count] = eigen_pose;
+      Eigen::Isometry3d eigen_pose;
+      tf::poseTFToEigen(transform, eigen_pose); 
+      A0n[i] = eigen_pose;
       ROS_INFO_STREAM("Pose " << i << ": captured transform:\n" << eigen_pose.matrix());
     }
     catch (const tf::TransformException& ex)
@@ -147,7 +147,7 @@ int main(int argc, char** argv)
   double c11 = term1 / delta1;
   double c21 = term2 / delta1;
   double c31 = term3 / delta1;
-  ROS_INFO_STREAM(" delat1: ", delta1);
+  ROS_INFO_STREAM(" delat1: "<< delta1);
   ROS_INFO_STREAM("c11: "<< c11 << ", c21: "<< c21 << ", c31: "<<c31);
   //  point 3: calculate delta2 and then c12, c22, c32
   Vector4d V2; //={ vx, vy, vz, 1};
@@ -160,14 +160,14 @@ int main(int argc, char** argv)
   double c22 = term2 / delta2;
   double c32 = term3 / delta2;
   ROS_INFO_STREAM(" delat2: "<< delta2);
-  ROS_INFO_STREAM("c21: "<< c21 << " ,c22: "<< c22 << ", c23: " << c23);
+  ROS_INFO_STREAM("c21: "<< c21 << " ,c22: "<< c22 << ", c32: " << c32);
   //calculate c31, c32, c33;  c13=k1.c33  && c23=k2.c33
   double k1= (c21*c32 - c22*c31)/(c11*c22 - c21*c12);
   double k2= (c12*c31 - c11*c31)/(c11*c22 - c21*c12);
   double c33 = sqrt( 1 /(1+k1*k1+k2*k2) );
   double c13 = k1* c33;
   double c23 = k2* c33;
-  ROS_INFO_STREAM("c31: "<< c31 << ", c32: " c32 << ", c33: " << c33);
+  ROS_INFO_STREAM("c31: "<< c31 << ", c32: "<< c32 << ", c33: " << c33);
   // store rotation matrix and translation
   Matrix3d Rot;
            Rot << c11, c12, c13,
@@ -179,11 +179,11 @@ int main(int argc, char** argv)
   ROS_INFO_STREAM("translation:\n "<< transl);
   // build final transformation
   // form rotation matrix using values of cs
-  Affine3d Anns;
+  Isometry3d Anns;
   Anns.matrix() << c11, c12, c13, r0ns_n(0),
                    c21, c22, c23, r0ns_n(1),
                    c31, c32, c33, r0ns_n(2),
                      0,   0,   0,        1;
-  ROS_INFO_STREAM(" Done !");
+  ROS_INFO(" Done !");
   return 0;
 }
