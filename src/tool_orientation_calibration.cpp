@@ -106,11 +106,10 @@ int main(int argc, char** argv)
   ROS_INFO("=======\n step 2: TCP Orientation calibration using three point method ========== ");
   std::vector<Isometry3d> A0n; // to store the transformation matrix for the points
   A0n.resize( 3);
-
-  for (int i=0; i<3; i++)
+  A0n[i] = eigen_pose;
+  ROS_INFO("the current pose is considered as the First point ... ");
+  for (int i=1; i<3; i++)
   {
-    if(i ==0)
-        ROS_INFO("First point: keep the TCP at same point where the translation calibration was done, press enter");
     else if(i ==1)
         ROS_INFO("Second point: move the TCP to any location along the X axis of the tool and press enter");
     else
