@@ -1,9 +1,12 @@
-cmake_minimum_required(VERSION 2.8.3)
+cmake_minimum_required(VERSION 3.0.2)
 project(tool_point_calibration)
+add_compile_options(-std=c++14)
 
 find_package(catkin REQUIRED COMPONENTS
+  roscpp
   tf
   tf_conversions
+  sss_msgs
 )
 find_package(Ceres REQUIRED)
 find_package(Eigen3 REQUIRED)
@@ -12,11 +15,14 @@ find_package(Eigen3 REQUIRED)
 catkin_package(
  INCLUDE_DIRS include
  LIBRARIES ${PROJECT_NAME}
-  CATKIN_DEPENDS tf tf_conversions
+  CATKIN_DEPENDS 
+  roscpp
+  tf
+  tf_conversions
+  sss_msgs
 )
 
 include_directories(include ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIRS} ${EIGEN_INCLUDE_DIRS})
-add_definitions(-std=c++11)
 
 # The core tool calibration library
 add_library(${PROJECT_NAME}
@@ -38,6 +44,18 @@ add_executable(console_calibration
 add_dependencies(console_calibration ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 target_link_libraries(console_calibration
+  ${catkin_LIBRARIES}
+  ${CERES_LIBRARIES}
+  tool_point_calibration
+)
+
+add_executable(tool_calibration_server
+  src/tool_calibration_server.cpp
+)
+
+add_dependencies(tool_calibration_server ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
+target_link_libraries(tool_calibration_server
   ${catkin_LIBRARIES}
   ${CERES_LIBRARIES}
   tool_point_calibration
@@ -87,10 +105,10 @@ target_link_libraries(tool_orientation_calibration  ${catkin_LIBRARIES}  ${CERES
 #############
 
 ## Add gtest based cpp test target and link libraries
-catkin_add_gtest(${PROJECT_NAME}-test
-  test/utest.cpp
-  test/test_tool.cpp
-)
+# catkin_add_gtest(${PROJECT_NAME}-test
+#   test/utest.cpp
+#   test/test_tool.cpp
+# )
 if(TARGET ${PROJECT_NAME}-test)
   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 endif()
