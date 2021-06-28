@@ -1,0 +1,7 @@
+<launch>
+  <node name="tool_calibration_server" pkg="tool_point_calibration" type="tool_calibration_server" output="screen">
+  </node>
+
+  <include file="$(find tool_point_calibration)/launch/calibration_urdf_server.launch"/>
+
+</launch>
