@@ -107,7 +107,7 @@ class CalibrationUrdfServer:
 
 def main():
     rospy.init_node('calibration_urdf_server')
-    cuus = CalibrationUrdfServer()
+    cus = CalibrationUrdfServer()
     rospy.loginfo('CalibrationUrdfUpdateServer has started')
     rospy.spin()
 

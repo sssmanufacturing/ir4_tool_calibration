@@ -61,19 +61,6 @@ target_link_libraries(${PROJECT_NAME}
   ${CERES_LIBRARIES}
 )
 
-# A utility for calibrating a named tool point on the command line
-add_executable(console_calibration
-  src/console_calibration.cpp
-)
-
-add_dependencies(console_calibration ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
-target_link_libraries(console_calibration
-  ${catkin_LIBRARIES}
-  ${CERES_LIBRARIES}
-  tool_point_calibration
-)
-
 add_executable(tool_calibration_server
   src/tool_calibration_server.cpp
 )
@@ -85,10 +72,6 @@ target_link_libraries(tool_calibration_server
   ${CERES_LIBRARIES}
   tool_point_calibration
 )
-
-add_executable(tool_orientation_calibration  src/tool_orientation_calibration.cpp)
-add_dependencies(tool_orientation_calibration ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(tool_orientation_calibration  ${catkin_LIBRARIES}  ${CERES_LIBRARIES}  tool_point_calibration)
 
 #############
 ## Install ##
@@ -124,19 +107,3 @@ target_link_libraries(tool_orientation_calibration  ${catkin_LIBRARIES}  ${CERES
 #   # myfile2
 #   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
 # )
-
-#############
-## Testing ##
-#############
-
-## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test
-#   test/utest.cpp
-#   test/test_tool.cpp
-# )
-if(TARGET ${PROJECT_NAME}-test)
-  target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
-endif()
-
-# Add folders to be run by python nosetests
-# catkin_add_nosetests(test)
