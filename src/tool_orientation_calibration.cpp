@@ -175,6 +175,10 @@ int main(int argc, char** argv)
   Vector3d transl= {r0ns_n(0), r0ns_n(1), r0ns_n(2)};
   // std::cout<<"Rot_matrix:\n "<< Rot <<std::endl;
   ROS_INFO_STREAM("Rot_matrix:\n "<< Rot);
+  // eulers angles
+  Vector3d eulers_angles = Rot.eulerAngles(0, 1, 2);
+  ROS_INFO_STREAM("Eulers angles:\n "<< eulers_angles);
+
   ROS_INFO_STREAM("translation:\n "<< transl);
   // build final transformation
   // form rotation matrix using values of cs

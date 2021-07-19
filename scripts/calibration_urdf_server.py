@@ -14,6 +14,7 @@ from tool_point_calibration.srv import CalibrationUrdfRetrieve, \
 
 
 from xml.dom import minidom
+import yaml
 
 class CalibrationUrdfServer:
     def __init__(self):
@@ -26,12 +27,12 @@ class CalibrationUrdfServer:
         # only supports 'xacro:property' elements at the moment
         self.element_tag_name = 'xacro:property'
 
+        # TODO: replace hardcoded directory with better way to load the yaml. Roslaunch param's maybe?
         self.system_catkin_package_dir = "/home/ir4/noetic/src/"
 
         # dict containing the calibration tool surface linked to the file location name and dict of urdf element names to req value
-        self.urdf_info_dict = {
-            "kr8_r1420_rcb/welder_tool_surface": {"file_location":"kuka/kuka_manipulators/kuka_common_support/urdf/kr8_calibration_values.urdf.xacro", "calibration_value_names":{"welder_tip_x": "calibration_x", "welder_tip_y": "calibration_y", "welder_tip_z": "calibration_z"}}
-        }
+        stream = open(self.system_catkin_package_dir + 'ir4_tool_point_calibration/config/urdf_info.yaml', 'r')
+        self.urdf_info_dict = yaml.load(stream, Loader=yaml.FullLoader)
 
     def update_urdf_cbf(self, req):
         rospy.loginfo('Calibration urdf update callback')
@@ -49,19 +50,20 @@ class CalibrationUrdfServer:
         for element in property_elements:
             node_name = element.getAttribute('name')
             if node_name in element_tag_name_to_calibration_value_dict.keys():
-                new_value = str(getattr(req, element_tag_name_to_calibration_value_dict[node_name]))
+                new_value = format(getattr(req, element_tag_name_to_calibration_value_dict[node_name]), 'f')
                 rospy.loginfo('Changing ' + node_name + ' to ' + new_value)
 
                 element.setAttribute('value', new_value)
 
         rospy.loginfo("Saving as: ")
-        rospy.loginfo(parsed_dom.toxml())
+        rospy.loginfo("\n" + parsed_dom.toxml())
 
         output_file = open(
             urdf_file_location, "w")
         output_file.write(parsed_dom.toxml())
         output_file.close()
-
+    
+        response.success = success
         return response
 
     def urdf_retrieve_cbf(self, req):

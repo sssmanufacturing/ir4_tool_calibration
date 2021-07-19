@@ -1,0 +1,8 @@
+kr8_r1420_rcb/welder_tool_surface:
+  file_location: "kuka/kuka_manipulators/kuka_common_support/urdf/kr8_calibration_values.urdf.xacro"
+  calibration_value_names:
+    welder_tip_x: 'calibration_x'
+    welder_tip_y: 'calibration_y'
+    welder_tip_z: 'calibration_z'
+
+# copy above layout for other tool surfaces

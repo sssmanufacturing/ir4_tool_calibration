@@ -24,18 +24,22 @@ ToolCalibrationServer::ToolCalibrationServer() : nh_("~")
           "get_tool_calibration_sample_point",
           boost::bind(&ToolCalibrationServer::sampleToolCalibrationSampleCallback, this, _1, _2));
 
-  calibration_urdf_retrieve_client_ = nh_.serviceClient<tool_point_calibration::CalibrationUrdfRetrieve>("calibration_"
+  calibration_urdf_retrieve_client_ = nh_.serviceClient<tool_point_calibration::CalibrationUrdfRetrieve>("/calibration_"
+                                                                                                         "urdf_server/"
+                                                                                                         "calibration_"
                                                                                                          "urdf_"
                                                                                                          "retrieve");
   if (!calibration_urdf_retrieve_client_.waitForExistence(ros::Duration(2.0)) && ros::ok())
   {
-    ROS_INFO("Waiting for tool_calibration_server/calibration_urdf_retrieve");
+    ROS_INFO("Waiting for calibration_urdf_server/calibration_urdf_retrieve");
   }
-  calibration_urdf_update_client_ = nh_.serviceClient<tool_point_calibration::CalibrationUrdfUpdate>("calibration_urdf_"
+  calibration_urdf_update_client_ = nh_.serviceClient<tool_point_calibration::CalibrationUrdfUpdate>("/calibration_"
+                                                                                                     "urdf_server/"
+                                                                                                     "calibration_urdf_"
                                                                                                      "update");
   if (!calibration_urdf_update_client_.waitForExistence(ros::Duration(2.0)) && ros::ok())
   {
-    ROS_INFO("Waiting for tool_calibration_server/calibration_urdf_update");
+    ROS_INFO("Waiting for calibration_urdf_server/calibration_urdf_update");
   }
 }
 
@@ -63,12 +67,18 @@ bool ToolCalibrationServer::sampleToolCalibrationSampleCallback(const sss_msgs::
     robot_tool_calibration_samples_.erase(tool_surface_frame);
     robot_tool_calibration_results_.erase(tool_surface_frame);
     touch_point_result_avaliable_.erase(tool_surface_frame);
+    ROS_INFO_STREAM("Successfully erased  tool point calibration samples");
+    res.success = true;
+    return true;
   }
   else if (req.service_call_cmd == sss_msgs::GetToolCalibrationSampleRequest::TOOL_ORIENTATION_SAMPLES_RESET)
   {
     // clear all tool orientation samples for the given tool surface
     robot_tool_orientation_calibration_samples_.erase(tool_surface_frame);
     robot_tool_orientation_calibration_results_.erase(tool_surface_frame);
+    ROS_INFO_STREAM("Successfully erased orientation calibration samples");
+    res.success = true;
+    return true;
   }
   else if (req.service_call_cmd == sss_msgs::GetToolCalibrationSampleRequest::CALCULATE_TOOL_POINT_CALIBRATION)
   {
@@ -90,9 +100,25 @@ bool ToolCalibrationServer::sampleToolCalibrationSampleCallback(const sss_msgs::
     // calculate result
     robot_tool_calibration_results_[tool_surface_frame] =
         tool_point_calibration::calibrateTcp(robot_tool_calibration_samples_[tool_surface_frame]);
+
+    // TODO: sanity check that the new calibration makes sense
+
     touch_point_result_avaliable_[tool_surface_frame] = true;
 
-    calculateUrdfFormatedToolCalibration(tool_surface_frame);
+    // get urdf calibration and update
+    if (!calculateUrdfFormatedToolCalibration(tool_surface_frame))
+    {
+      res.success = false;
+      return false;
+    }
+    else
+    {
+      ROS_INFO_STREAM("Successfully calculated the tool calibration for " << tool_surface_frame);
+      ROS_INFO_STREAM("Calibrated tip from expected (meters in xyz): ["
+                      << robot_tool_calibration_results_[tool_surface_frame].tcp_offset.transpose() << "]");
+      res.success = true;
+      return true;
+    }
   }
   else if (req.service_call_cmd == sss_msgs::GetToolCalibrationSampleRequest::CALCULATE_TOOL_ORIENTATION_CALIBRATION)
   {
@@ -110,8 +136,79 @@ bool ToolCalibrationServer::sampleToolCalibrationSampleCallback(const sss_msgs::
     {
       ROS_ERROR_STREAM("Failed to calculate tool orientation result");
       res.success = false;
+      return false;
+    }
+    else
+    {
+      res.success = true;
       return true;
     }
+  }
+  else if (req.service_call_cmd == sss_msgs::GetToolCalibrationSampleRequest::UPDATE_TOOL_URDF)
+  {
+    if (!touch_point_result_avaliable_[tool_surface_frame])
+    {
+      ROS_ERROR_STREAM("No calibration result avaliable. Not updating tool urdf");
+      res.success = false;
+      return false;
+    }
+
+    if (robot_tool_urdf_formated_calibration_.count(tool_surface_frame) == 0)
+    {
+      // no value avaliable for the tool surface
+      ROS_ERROR_STREAM("No robot_tool_urdf_formated_calibration_ for tool surface: " << tool_surface_frame);
+      res.success = false;
+      return false;
+    }
+
+    // update the values from the tools urdf
+    tool_point_calibration::CalibrationUrdfUpdate calibration_urdf_update_srv;
+    // fill request
+    calibration_urdf_update_srv.request.robot_tool_surface = tool_surface_frame;
+    calibration_urdf_update_srv.request.calibration_x =
+        robot_tool_urdf_formated_calibration_[tool_surface_frame].calibration_x;
+    calibration_urdf_update_srv.request.calibration_y =
+        robot_tool_urdf_formated_calibration_[tool_surface_frame].calibration_y;
+    calibration_urdf_update_srv.request.calibration_z =
+        robot_tool_urdf_formated_calibration_[tool_surface_frame].calibration_z;
+
+    if (robot_tool_orientation_calibration_results_.count(tool_surface_frame) == 0)
+    {
+      ROS_INFO("Not updating the tools orientation");
+      calibration_urdf_update_srv.request.orientation_calibrated = false;
+      calibration_urdf_update_srv.request.calibration_roll = 0.0;
+      calibration_urdf_update_srv.request.calibration_pitch = 0.0;
+      calibration_urdf_update_srv.request.calibration_yaw = 0.0;
+    }
+    else
+    {
+      calibration_urdf_update_srv.request.orientation_calibrated = true;
+      calibration_urdf_update_srv.request.calibration_roll =
+          robot_tool_urdf_formated_calibration_[tool_surface_frame].calibration_roll;
+      calibration_urdf_update_srv.request.calibration_pitch =
+          robot_tool_urdf_formated_calibration_[tool_surface_frame].calibration_pitch;
+      calibration_urdf_update_srv.request.calibration_yaw =
+          robot_tool_urdf_formated_calibration_[tool_surface_frame].calibration_yaw;
+    }
+
+    if (calibration_urdf_update_client_.call(calibration_urdf_update_srv))
+    {
+      if (!calibration_urdf_update_srv.response.success)
+      {
+        ROS_ERROR_STREAM("Failed to update calibration values from urdf for " << tool_surface_frame);
+        res.success = false;
+        return false;
+      }
+    }
+    else
+    {
+      ROS_ERROR("Failed to call calibration_urdf_update service node");
+      res.success = false;
+      return false;
+    }
+
+    res.success = true;
+    return true;
   }
 
   // Create a transform listener to query tool frames. Check if they actually exist
@@ -178,8 +275,8 @@ bool ToolCalibrationServer::sampleToolCalibrationSampleCallback(const sss_msgs::
     }
 
     robot_tool_calibration_samples_[tool_surface_frame].push_back(eigen_pose);
-    ROS_INFO_STREAM(robot_tool_calibration_samples_[tool_surface_frame].size()
-                    << ' tool point sample(s) collected for ' << tool_surface_frame);
+    double number_of_samples = robot_tool_calibration_samples_[tool_surface_frame].size();
+    ROS_INFO_STREAM(number_of_samples << " tool point sample(s) collected for " << tool_surface_frame);
   }
   else if (req.service_call_cmd == sss_msgs::GetToolCalibrationSampleRequest::TOOL_ORIENTATION_SAMPLE)
   {
@@ -206,58 +303,6 @@ bool ToolCalibrationServer::sampleToolCalibrationSampleCallback(const sss_msgs::
     ROS_INFO_STREAM(robot_tool_orientation_calibration_samples_[tool_surface_frame].size()
                     << ' tool orientation sample(s) collected for ' << tool_surface_frame);
   }
-  else if (req.service_call_cmd == sss_msgs::GetToolCalibrationSampleRequest::UPDATE_TOOL_URDF)
-  {
-    if (robot_tool_urdf_formated_calibration_.count(tool_surface_frame) == 0)
-    {
-      // no value avaliable for the tool surface
-      ROS_ERROR_STREAM("No robot_tool_urdf_formated_calibration_ for tool surface: " << tool_surface_frame);
-    }
-
-    // update the values from the tools urdf
-    tool_point_calibration::CalibrationUrdfUpdate calibration_urdf_update_srv;
-    // fill request
-    calibration_urdf_update_srv.request.robot_tool_surface = tool_surface_frame;
-    calibration_urdf_update_srv.request.calibration_x =
-        robot_tool_urdf_formated_calibration_[tool_surface_frame].calibration_x;
-    calibration_urdf_update_srv.request.calibration_y =
-        robot_tool_urdf_formated_calibration_[tool_surface_frame].calibration_y;
-    calibration_urdf_update_srv.request.calibration_z =
-        robot_tool_urdf_formated_calibration_[tool_surface_frame].calibration_z;
-
-    if (robot_tool_orientation_calibration_results_.count(tool_surface_frame) == 0)
-    {
-      ROS_INFO("Not updating the tools orientation");
-      calibration_urdf_update_srv.request.orientation_calibrated = false;
-      calibration_urdf_update_srv.request.calibration_roll = 0.0;
-      calibration_urdf_update_srv.request.calibration_pitch = 0.0;
-      calibration_urdf_update_srv.request.calibration_yaw = 0.0;
-    }
-    else
-    {
-      calibration_urdf_update_srv.request.orientation_calibrated = true;
-      calibration_urdf_update_srv.request.calibration_roll =
-          robot_tool_urdf_formated_calibration_[tool_surface_frame].calibration_roll;
-      calibration_urdf_update_srv.request.calibration_pitch =
-          robot_tool_urdf_formated_calibration_[tool_surface_frame].calibration_pitch;
-      calibration_urdf_update_srv.request.calibration_yaw =
-          robot_tool_urdf_formated_calibration_[tool_surface_frame].calibration_yaw;
-    }
-
-    if (calibration_urdf_update_client_.call(calibration_urdf_update_srv))
-    {
-      if (!calibration_urdf_update_srv.response.success)
-      {
-        ROS_ERROR_STREAM("Failed to retieve calibration values from urdf for " << tool_surface_frame);
-        exit(EXIT_FAILURE);
-      }
-    }
-    else
-    {
-      ROS_ERROR("Failed to call calibration_urdf_update service node");
-      exit(EXIT_FAILURE);
-    }
-  }
   else
   {
     ROS_ERROR_STREAM('Unsupported service_call_cmd');
@@ -265,6 +310,7 @@ bool ToolCalibrationServer::sampleToolCalibrationSampleCallback(const sss_msgs::
     return true;
   }
 
+  res.success = true;
   return true;
 }
 
@@ -357,13 +403,13 @@ bool ToolCalibrationServer::calculateUrdfFormatedToolCalibration(const std::stri
     if (!calibration_urdf_retrieve_srv.response.success)
     {
       ROS_ERROR_STREAM("Failed to retieve calibration values from urdf for " << tool_surface_frame);
-      exit(EXIT_FAILURE);
+      return false;
     }
   }
   else
   {
     ROS_ERROR("Failed to call calibration_urdf_retrieve service node");
-    exit(EXIT_FAILURE);
+    return false;
   }
 
   tool_point_calibration::CalibrationUrdfRetrieveResponse tool_calibration;
