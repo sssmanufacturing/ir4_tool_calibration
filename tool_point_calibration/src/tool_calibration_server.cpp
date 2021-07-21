@@ -210,6 +210,75 @@ bool ToolCalibrationServer::sampleToolCalibrationSampleCallback(const sss_msgs::
     res.success = true;
     return true;
   }
+  else if (req.service_call_cmd == sss_msgs::GetToolCalibrationSampleRequest::REFERENCE_OBJECT_ORIENTATION_CALIBRATION)
+  {
+    // TODO: for now just hard code a check to make sure we are using the "kr8_r1420_rcb/welder_tool_surface"
+    if (tool_surface_frame != "kr8_r1420_rcb/welder_tool_surface")
+    {
+      ROS_ERROR_STREAM("Currently only the kr8_r1420_rcb/welder_tool_surface is supported");
+      res.success = false;
+      return false;
+    }
+
+    // first do a tolerance check on the point calibration
+    // TODO: need to pass through the object all the way from the parsing level 
+
+    // need listener
+    tf::TransformListener listener;
+    std::string error_msg;
+    std::string world_frame = "world";
+
+    if (!listener.waitForTransform(world_frame, tool_surface_frame, ros::Time(0), ros::Duration(1.0), ros::Duration(0.01),
+                                  &error_msg))
+    {
+      bool world_found = listener.frameExists(world_frame);
+      bool tool_found = listener.frameExists(tool_surface_frame);
+      
+      if (!world_found && !tool_found)
+      {
+        ROS_WARN("Check to make sure that a robot state publisher or other node is publishing"
+                " tf frames for your robot. Also check that your base/tool frames names are"
+                " correct and not missing a prefix, for example.");
+      }
+      else if (!world_found)
+      {
+        ROS_WARN("Check to make sure that world frame '%s' actually exists.", base_frame.c_str());
+      }
+      else if (!tool_found)
+      {
+        ROS_WARN("Check to make sure that tool_surface_frame '%s' actually exists.", tool_surface_frame.c_str());
+      }
+      ROS_ERROR_STREAM("");
+      res.success = false;
+      return true;
+    }
+
+    Eigen::Isometry3d tool_eigen_pose, ref_frame_eigen_pose;
+    tf::StampedTransform world_to_tip_transform;
+    try
+    {
+      listener.lookupTransform(world_frame, tool_surface_frame, ros::Time(0), world_to_tip_transform);
+      tf::poseTFToEigen(transform, eigen_pose);
+      ROS_INFO_STREAM("Pose captured transform:\n" << eigen_pose.matrix());
+    }
+    catch (const tf::TransformException& ex)
+    {
+      ROS_ERROR("Unable to lookup transform");
+      res.success = false;
+      return true;
+    }
+
+    // Now use the pose of the reference object and find the difference from the world_to_tip_transform
+    tf::poseMsgToEigen(req.reference_object_pose, tool_eigen_pose);
+
+    Eigen::Isometry3d tool_to_ref_eigen = ref_frame_eigen_pose.inverse() * tool_eigen_pose;
+
+    // TODO: Test prints for testing
+    ROS_ERROR_STREAM("Rotation is: " << tool_to_ref_eigen.rotation());
+    ROS_ERROR_STREAM("Translation is: " << tool_to_ref_eigen.translation()); 
+
+
+  }
 
   // Create a transform listener to query tool frames. Check if they actually exist
   tf::TransformListener listener;
@@ -234,7 +303,7 @@ bool ToolCalibrationServer::sampleToolCalibrationSampleCallback(const sss_msgs::
     }
     else if (!tool_found)
     {
-      ROS_WARN("Check to make sure that tool0 frame '%s' actually exists.", tool_surface_frame.c_str());
+      ROS_WARN("Check to make sure that tool_surface_frame '%s' actually exists.", tool_surface_frame.c_str());
     }
     res.success = false;
     return true;
