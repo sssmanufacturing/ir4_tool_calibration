@@ -47,7 +47,7 @@ ToolCalibrationServer::ToolCalibrationServer() : nh_("~")
 bool ToolCalibrationServer::sampleToolCalibrationSampleCallback(const sss_msgs::GetToolCalibrationSample::Request& req,
                                                                 sss_msgs::GetToolCalibrationSample::Response& res)
 {
-  // sanity checks // TODO:
+  // sanity check
   if (robot_base_frames_.count(req.robot_id) == 0)
   {
     ROS_ERROR_STREAM(req.robot_id << " is not a currently supported robot");
@@ -139,7 +139,7 @@ bool ToolCalibrationServer::sampleToolCalibrationSampleCallback(const sss_msgs::
     }
 
     // calculate result
-    // TODO: robot_tool_orientation_calibration_samples_
+    // TODO: currently not calculating as intended and not actually returning anything
     calculateRotationFromSamples(tool_surface_frame);
 
     // TODO: sanity check that the new calibration makes sense
@@ -155,7 +155,7 @@ bool ToolCalibrationServer::sampleToolCalibrationSampleCallback(const sss_msgs::
     else
     {
       ROS_INFO_STREAM("Successfully calculated the tool orientation calibration for " << tool_surface_frame);
-      // TODO: print out of angle 
+      // TODO: print out of result
       res.success = true;
       return true;
     }

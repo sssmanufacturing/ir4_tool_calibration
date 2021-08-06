@@ -3,6 +3,8 @@
 #include <ceres/ceres.h>
 #include <ceres/rotation.h>
 
+// code from https://github.com/Jmeyer1292/tool_point_calibration
+
 /**
  * @brief The ToolPointEstimator struct
  */
