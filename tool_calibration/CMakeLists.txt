@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(tool_point_calibration)
+project(tool_calibration)
 add_compile_options(-std=c++14)
 
 find_package(catkin REQUIRED COMPONENTS
@@ -46,31 +46,27 @@ catkin_package(
   sss_msgs
 )
 
-
 include_directories(include ${catkin_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIRS} ${EIGEN_INCLUDE_DIRS})
 
-# The core tool calibration library
+#common commands for building c++ executables and libraries
 add_library(${PROJECT_NAME}
   src/tool_point_calibration.cpp
-)
-
+  )
 add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
 target_link_libraries(${PROJECT_NAME}
   ${catkin_LIBRARIES}
   ${CERES_LIBRARIES}
 )
 
 add_executable(tool_calibration_server
-  src/tool_calibration_server.cpp
-)
+ src/tool_calibration_server.cpp
+ )
 
-add_dependencies(tool_calibration_server ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
+add_dependencies(tool_calibration_server ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS} )
 target_link_libraries(tool_calibration_server
   ${catkin_LIBRARIES}
   ${CERES_LIBRARIES}
-  tool_point_calibration
+  tool_calibration
 )
 
 #############

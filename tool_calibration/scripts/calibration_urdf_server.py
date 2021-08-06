@@ -4,11 +4,11 @@ import rospy
 
 from sss_pytools.srv import UnionMeshes, UnionMeshesResponse
 
-from tool_point_calibration.srv import CalibrationUrdfUpdate, \
+from tool_calibration.srv import CalibrationUrdfUpdate, \
                                        CalibrationUrdfUpdateRequest, \
                                        CalibrationUrdfUpdateResponse
 
-from tool_point_calibration.srv import CalibrationUrdfRetrieve, \
+from tool_calibration.srv import CalibrationUrdfRetrieve, \
                                        CalibrationUrdfRetrieveRequest, \
                                        CalibrationUrdfRetrieveResponse
 
@@ -31,7 +31,7 @@ class CalibrationUrdfServer:
         self.system_catkin_package_dir = "/home/ir4/noetic/src/"
 
         # dict containing the calibration tool surface linked to the file location name and dict of urdf element names to req value
-        stream = open(self.system_catkin_package_dir + 'ir4_tool_calibration/tool_point_calibration/config/urdf_info.yaml', 'r')
+        stream = open(self.system_catkin_package_dir + 'ir4_tool_calibration/tool_calibration/config/urdf_info.yaml', 'r')
         self.urdf_info_dict = yaml.load(stream, Loader=yaml.FullLoader)
 
     def update_urdf_cbf(self, req):

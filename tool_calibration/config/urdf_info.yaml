@@ -1,0 +1,21 @@
+kr8_r1420_rcb/welder_tool_surface:
+  file_location: "kuka/kuka_manipulators/kuka_common_support/urdf/kr8_calibration_values.urdf.xacro"
+  calibration_value_names:
+    welder_tip_x: 'calibration_x'
+    welder_tip_y: 'calibration_y'
+    welder_tip_z: 'calibration_z'
+    welder_tip_roll: 'calibration_roll'
+    welder_tip_pitch: 'calibration_pitch'
+    welder_tip_yaw: 'calibration_yaw'
+
+kr8_r1420_rcb/2d_laser_calibration_point:
+  file_location: "kuka/kuka_manipulators/kuka_common_support/urdf/kr8_calibration_values.urdf.xacro"
+  calibration_value_names:
+    tool_2D_laser_calibration_point_x: 'calibration_x'
+    tool_2D_laser_calibration_point_y: 'calibration_y'
+    tool_2D_laser_calibration_point_z: 'calibration_z'
+    tool_2D_laser_calibration_point_roll: 'calibration_roll'
+    tool_2D_laser_calibration_point_pitch: 'calibration_pitch'
+    tool_2D_laser_calibration_point_yaw: 'calibration_yaw'
+
+# copy above layout for other tool surfaces

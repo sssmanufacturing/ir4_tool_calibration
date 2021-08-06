@@ -1,4 +1,0 @@
-<launch>
-  <node name="calibration_urdf_server" pkg="tool_point_calibration" type="calibration_urdf_server.py" output="screen">
-  </node>
-</launch>

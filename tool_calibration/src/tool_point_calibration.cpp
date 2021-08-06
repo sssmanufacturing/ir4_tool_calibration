@@ -1,4 +1,4 @@
-#include <tool_point_calibration/tool_point_calibration.h>
+#include <tool_calibration/tool_point_calibration.h>
 
 #include <ceres/ceres.h>
 #include <ceres/rotation.h>

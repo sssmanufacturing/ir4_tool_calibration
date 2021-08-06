@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package>
-  <name>tool_point_calibration</name>
+  <name>tool_calibration</name>
   <version>0.1.0</version>
   <description>
     A simple package that uses the Ceres optimization library to perform simple,
