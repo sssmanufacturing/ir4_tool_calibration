@@ -25,8 +25,7 @@ private:
   // Parameters
   // TODO: add base links of other robots here. Could also load this from parameters / configs
   std::map<std::string, std::string> robot_base_frames_{ { "kr8_r1420_rcb", "base_link" } }; 
-  std::vector<std::string> reference_orientation_calibration_supported_tools_;
-  reference_orientation_calibration_supported_tools_ = {"kr8_r1420_rcb/welder_tool_surface"};
+  std::vector<std::string> reference_orientation_calibration_supported_tools_{"kr8_r1420_rcb/welder_tool_surface"};
   uint min_number_of_samples_ = 4;  
   uint required_number_of_orientation_samples_ = 3;  
  

@@ -185,9 +185,8 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
            sss_msgs::GetToolCalibrationRequest::CALCULATE_ORIENTATION_CALIBRATION_FROM_REFERENCE_OBJECT)
   {
     // check if it is a supported tool surface
-    if
-      !(std::count(reference_orientation_calibration_supported_tools_.begin(),
-                   reference_orientation_calibration_supported_tools_.end(), tool_surface_frame))
+    if (!(std::count(reference_orientation_calibration_supported_tools_.begin(),
+                   reference_orientation_calibration_supported_tools_.end(), tool_surface_frame)))
       {
         ROS_ERROR_STREAM("Currently only tools in reference_orientation_calibration_supported_tools_ are supported");
         res.success = false;
