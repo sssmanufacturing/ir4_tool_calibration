@@ -21,32 +21,51 @@ ToolCalibrationServer::ToolCalibrationServer() : nh_("~")
 {
   // service server
   tool_calibration_srv_ =
-      nh_.advertiseService<sss_msgs::GetToolCalibrationSample::Request, sss_msgs::GetToolCalibrationSample::Response>(
-          "get_tool_calibration_sample_point",
-          boost::bind(&ToolCalibrationServer::sampleToolCalibrationSampleCallback, this, _1, _2));
+      nh_.advertiseService<sss_msgs::GetToolCalibration::Request, sss_msgs::GetToolCalibration::Response>(
+          "tool_calibration_service", boost::bind(&ToolCalibrationServer::toolCalibrationCallback, this, _1, _2));
 
   calibration_urdf_retrieve_client_ = nh_.serviceClient<tool_calibration::CalibrationUrdfRetrieve>("/calibration_"
-                                                                                                         "urdf_server/"
-                                                                                                         "calibration_"
-                                                                                                         "urdf_"
-                                                                                                         "retrieve");
+                                                                                                   "urdf_server/"
+                                                                                                   "calibration_"
+                                                                                                   "urdf_"
+                                                                                                   "retrieve");
   if (!calibration_urdf_retrieve_client_.waitForExistence(ros::Duration(2.0)) && ros::ok())
   {
     ROS_INFO("Waiting for calibration_urdf_server/calibration_urdf_retrieve");
   }
   calibration_urdf_update_client_ = nh_.serviceClient<tool_calibration::CalibrationUrdfUpdate>("/calibration_"
-                                                                                                     "urdf_server/"
-                                                                                                     "calibration_urdf_"
-                                                                                                     "update");
+                                                                                               "urdf_server/"
+                                                                                               "calibration_urdf_"
+                                                                                               "update");
   if (!calibration_urdf_update_client_.waitForExistence(ros::Duration(2.0)) && ros::ok())
   {
     ROS_INFO("Waiting for calibration_urdf_server/calibration_urdf_update");
   }
 }
 
-bool ToolCalibrationServer::sampleToolCalibrationSampleCallback(const sss_msgs::GetToolCalibrationSample::Request& req,
-                                                                sss_msgs::GetToolCalibrationSample::Response& res)
+bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalibration::Request& req,
+                                                    sss_msgs::GetToolCalibration::Response& res)
 {
+  /*
+  Main callback for the tool calibration server.
+  Aims to allow user assisted tool calibration run through the system with multiple tasks to assist the process
+
+  Command type is recieved from the req.cmd.
+  Summary of what each command is trying to do listed below:
+    - TOOL_POINT_SAMPLE: collect sample of current joint configuration for tool point calibration
+    - TOOL_ORIENTATION_SAMPLE_P1: collect sample of current joint configuration for orientation calibration
+    - TOOL_ORIENTATION_SAMPLE_P2: collect sample of current joint configuration for orientation calibration
+    - TOOL_ORIENTATION_SAMPLE_P3: collect sample of current joint configuration for orientation calibration
+    - TOOL_POINT_SAMPLES_RESET: resets tool point calibration
+    - TOOL_ORIENTATION_SAMPLES_RESET: resets tool orientation calibration
+    - CALCULATE_TOOL_POINT_CALIBRATION: calculates tool point calibration
+    - CALCULATE_TOOL_ORIENTATION_CALIBRATION: calculates tool orientation calibration
+    - CALCULATE_ORIENTATION_CALIBRATION_FROM_REFERENCE_OBJECT: calculates tool orientation calibration from a reference
+      object (TODO: Currently calculation not working. This cmd currently does not update the in memory calibration
+  values)
+    - UPDATE_TOOL_URDF: updated the tool calibration urdf file with latest calculated calibration values
+  */
+
   // sanity check
   if (robot_base_frames_.count(req.robot_id) == 0)
   {
@@ -62,7 +81,7 @@ bool ToolCalibrationServer::sampleToolCalibrationSampleCallback(const sss_msgs::
   base_frame = req.robot_id + '/' + robot_base_frames_[req.robot_id];
   tool_surface_frame = req.robot_id + '/' + req.tool_surface_name;
 
-  if (req.service_call_cmd == sss_msgs::GetToolCalibrationSampleRequest::TOOL_POINT_SAMPLES_RESET)
+  if (req.service_call_cmd == sss_msgs::GetToolCalibrationRequest::TOOL_POINT_SAMPLES_RESET)
   {
     // clear all tool point samples for the given tool surface
     robot_tool_calibration_samples_.erase(tool_surface_frame);
@@ -72,7 +91,7 @@ bool ToolCalibrationServer::sampleToolCalibrationSampleCallback(const sss_msgs::
     res.success = true;
     return true;
   }
-  else if (req.service_call_cmd == sss_msgs::GetToolCalibrationSampleRequest::TOOL_ORIENTATION_SAMPLES_RESET)
+  else if (req.service_call_cmd == sss_msgs::GetToolCalibrationRequest::TOOL_ORIENTATION_SAMPLES_RESET)
   {
     // clear all tool orientation samples for the given tool surface
     robot_tool_orientation_calibration_samples_.erase(tool_surface_frame);
@@ -81,9 +100,9 @@ bool ToolCalibrationServer::sampleToolCalibrationSampleCallback(const sss_msgs::
     res.success = true;
     return true;
   }
-  else if (req.service_call_cmd == sss_msgs::GetToolCalibrationSampleRequest::CALCULATE_TOOL_POINT_CALIBRATION)
+  else if (req.service_call_cmd == sss_msgs::GetToolCalibrationRequest::CALCULATE_TOOL_POINT_CALIBRATION)
   {
-    // calculate tool point calibration result and call service call to update the URDF
+    // calculate tool point calibration result and calculate urdf formated calibration values
     if (robot_tool_calibration_samples_[tool_surface_frame].size() < min_number_of_samples_)
     {
       ROS_ERROR_STREAM("Must have atleast " << min_number_of_samples_ << " to calculate the calibration result for "
@@ -102,7 +121,7 @@ bool ToolCalibrationServer::sampleToolCalibrationSampleCallback(const sss_msgs::
     robot_tool_calibration_results_[tool_surface_frame] =
         tool_point_calibration::calibrateTcp(robot_tool_calibration_samples_[tool_surface_frame]);
 
-    // TODO: sanity check that the new calibration makes sense
+    // TODO: sanity check that the new calibration makes sense (i.e. within tolerance)
 
     touch_point_result_avaliable_[tool_surface_frame] = true;
 
@@ -121,13 +140,15 @@ bool ToolCalibrationServer::sampleToolCalibrationSampleCallback(const sss_msgs::
       return true;
     }
   }
-  else if (req.service_call_cmd == sss_msgs::GetToolCalibrationSampleRequest::CALCULATE_TOOL_ORIENTATION_CALIBRATION)
+  else if (req.service_call_cmd == sss_msgs::GetToolCalibrationRequest::CALCULATE_TOOL_ORIENTATION_CALIBRATION)
   {
-    // calculate tool point calibration result and call service call to update the URDF
-    if (robot_tool_orientation_calibration_samples_[tool_surface_frame].size() != required_number_of_orientation_samples_)
+    // calculate tool point calibration result and calculate URDF formated calibration values
+    if (robot_tool_orientation_calibration_samples_[tool_surface_frame].size() !=
+        required_number_of_orientation_samples_)
     {
-      ROS_ERROR_STREAM("Must have " << required_number_of_orientation_samples_ << " samples to calculate the orientation calibration result for "
-                                            << tool_surface_frame);
+      ROS_ERROR_STREAM("Must have " << required_number_of_orientation_samples_
+                                    << " samples to calculate the orientation calibration result for "
+                                    << tool_surface_frame);
       res.success = false;
       return true;
     }
@@ -142,7 +163,7 @@ bool ToolCalibrationServer::sampleToolCalibrationSampleCallback(const sss_msgs::
     // TODO: currently not calculating as intended and not actually returning anything
     calculateRotationFromSamples(tool_surface_frame);
 
-    // TODO: sanity check that the new calibration makes sense
+    // TODO: sanity check that the new calibration makes sense (i.e. within tolerance)
 
     touch_point_result_avaliable_[tool_surface_frame] = true;
 
@@ -160,15 +181,18 @@ bool ToolCalibrationServer::sampleToolCalibrationSampleCallback(const sss_msgs::
       return true;
     }
   }
-  else if (req.service_call_cmd == sss_msgs::GetToolCalibrationSampleRequest::CALCULATE_ORIENTATION_CALIBRATION_FROM_REFERENCE_OBJECT)
+  else if (req.service_call_cmd ==
+           sss_msgs::GetToolCalibrationRequest::CALCULATE_ORIENTATION_CALIBRATION_FROM_REFERENCE_OBJECT)
   {
-    // TODO: for now just hard code a check to make sure we are using the "kr8_r1420_rcb/welder_tool_surface"
-    if (tool_surface_frame != "kr8_r1420_rcb/welder_tool_surface")
-    {
-      ROS_ERROR_STREAM("Currently only the kr8_r1420_rcb/welder_tool_surface is supported");
-      res.success = false;
-      return false;
-    }
+    // check if it is a supported tool surface
+    if
+      !(std::count(reference_orientation_calibration_supported_tools_.begin(),
+                   reference_orientation_calibration_supported_tools_.end(), tool_surface_frame))
+      {
+        ROS_ERROR_STREAM("Currently only tools in reference_orientation_calibration_supported_tools_ are supported");
+        res.success = false;
+        return false;
+      }
 
     ROS_WARN("Calculating calibration from the robots current pose relative to the given reference object. Not using "
              "any saved robot_tool_orientation_calibration_samples_ for this calculation");
@@ -230,10 +254,10 @@ bool ToolCalibrationServer::sampleToolCalibrationSampleCallback(const sss_msgs::
     ROS_INFO_STREAM("Rotation tool_to_ref_eigen (y, p, r) is: \n" << tool_to_ref_eigen.rotation().eulerAngles(2, 1, 0));
     ROS_INFO_STREAM("Translation is: \n" << tool_to_ref_eigen.translation());
 
-    // at this point tool_to_ref_eigen.rotation().eulerAngles(2, 1, 0) = the yaw, pitch, roll that the welder frame is
-    // off from reference Need to adjust tool frame to match reference
+    // At this point tool_to_ref_eigen.rotation().eulerAngles(2, 1, 0) = the yaw, pitch, roll that the welder frame is
+    // off from reference. Need to adjust tool frame to match reference
 
-    // calculate tool orientation calibration result and call service call to update the URDF
+    // Calculate tool orientation calibration result and call service calculate urdf formated values
     if (robot_tool_orientation_calibration_results_.count(tool_surface_frame) == 0)
     {
       // no key for the frame exists. Add
@@ -252,7 +276,7 @@ bool ToolCalibrationServer::sampleToolCalibrationSampleCallback(const sss_msgs::
     res.success = true;
     return true;
   }
-  else if (req.service_call_cmd == sss_msgs::GetToolCalibrationSampleRequest::UPDATE_TOOL_URDF)
+  else if (req.service_call_cmd == sss_msgs::GetToolCalibrationRequest::UPDATE_TOOL_URDF)
   {
     if (!touch_point_result_avaliable_[tool_surface_frame])
     {
@@ -365,7 +389,7 @@ bool ToolCalibrationServer::sampleToolCalibrationSampleCallback(const sss_msgs::
   }
 
   // save sample point
-  if (req.service_call_cmd == sss_msgs::GetToolCalibrationSampleRequest::TOOL_POINT_SAMPLE)
+  if (req.service_call_cmd == sss_msgs::GetToolCalibrationRequest::TOOL_POINT_SAMPLE)
   {
     // collect tool point sample
 
@@ -386,9 +410,9 @@ bool ToolCalibrationServer::sampleToolCalibrationSampleCallback(const sss_msgs::
     double number_of_samples = robot_tool_calibration_samples_[tool_surface_frame].size();
     ROS_INFO_STREAM(number_of_samples << " tool point sample(s) collected for " << tool_surface_frame);
   }
-  else if (req.service_call_cmd == sss_msgs::GetToolCalibrationSampleRequest::TOOL_ORIENTATION_SAMPLE_P1 ||
-           req.service_call_cmd == sss_msgs::GetToolCalibrationSampleRequest::TOOL_ORIENTATION_SAMPLE_P2 ||
-           req.service_call_cmd == sss_msgs::GetToolCalibrationSampleRequest::TOOL_ORIENTATION_SAMPLE_P3)
+  else if (req.service_call_cmd == sss_msgs::GetToolCalibrationRequest::TOOL_ORIENTATION_SAMPLE_P1 ||
+           req.service_call_cmd == sss_msgs::GetToolCalibrationRequest::TOOL_ORIENTATION_SAMPLE_P2 ||
+           req.service_call_cmd == sss_msgs::GetToolCalibrationRequest::TOOL_ORIENTATION_SAMPLE_P3)
   {
     // collect tool orientation sample
 
@@ -403,26 +427,25 @@ bool ToolCalibrationServer::sampleToolCalibrationSampleCallback(const sss_msgs::
     }
 
     int save_index;
-    if(req.service_call_cmd == sss_msgs::GetToolCalibrationSampleRequest::TOOL_ORIENTATION_SAMPLE_P1)
+    if (req.service_call_cmd == sss_msgs::GetToolCalibrationRequest::TOOL_ORIENTATION_SAMPLE_P1)
     {
       save_index = 0;
     }
-    else if(req.service_call_cmd == sss_msgs::GetToolCalibrationSampleRequest::TOOL_ORIENTATION_SAMPLE_P2)
+    else if (req.service_call_cmd == sss_msgs::GetToolCalibrationRequest::TOOL_ORIENTATION_SAMPLE_P2)
     {
       save_index = 1;
     }
-    else if(req.service_call_cmd == sss_msgs::GetToolCalibrationSampleRequest::TOOL_ORIENTATION_SAMPLE_P3)
+    else if (req.service_call_cmd == sss_msgs::GetToolCalibrationRequest::TOOL_ORIENTATION_SAMPLE_P3)
     {
       save_index = 2;
     }
 
-    // save sample 
-    robot_tool_orientation_calibration_samples_[tool_surface_frame][save_index]= eigen_pose;
+    // save sample
+    robot_tool_orientation_calibration_samples_[tool_surface_frame][save_index] = eigen_pose;
 
-    ROS_INFO_STREAM("Point " << (save_index+1) 
-                    << " tool orientation sample collected for " << tool_surface_frame);
+    ROS_INFO_STREAM("Point " << (save_index + 1) << " tool orientation sample collected for " << tool_surface_frame);
     res.success = true;
-    return true; 
+    return true;
   }
   else
   {
@@ -474,9 +497,12 @@ bool ToolCalibrationServer::calculateUrdfFormatedToolCalibration(const std::stri
   // If orientation result avaliable update
   if (robot_tool_orientation_calibration_results_.count(tool_surface_frame) != 0)
   {
-    tool_calibration.calibration_roll = calibration_urdf_retrieve_srv.response.calibration_roll - robot_tool_orientation_calibration_results_[tool_surface_frame](2);
-    tool_calibration.calibration_pitch = calibration_urdf_retrieve_srv.response.calibration_pitch - robot_tool_orientation_calibration_results_[tool_surface_frame](1);
-    tool_calibration.calibration_yaw = calibration_urdf_retrieve_srv.response.calibration_yaw - robot_tool_orientation_calibration_results_[tool_surface_frame](0);
+    tool_calibration.calibration_roll = calibration_urdf_retrieve_srv.response.calibration_roll -
+                                        robot_tool_orientation_calibration_results_[tool_surface_frame](2);
+    tool_calibration.calibration_pitch = calibration_urdf_retrieve_srv.response.calibration_pitch -
+                                         robot_tool_orientation_calibration_results_[tool_surface_frame](1);
+    tool_calibration.calibration_yaw = calibration_urdf_retrieve_srv.response.calibration_yaw -
+                                       robot_tool_orientation_calibration_results_[tool_surface_frame](0);
   }
   else
   {
@@ -549,12 +575,12 @@ bool ToolCalibrationServer::calculateRotationFromSamples(const std::string tool_
   Eigen::Isometry3d Anns;
   Anns.matrix() << c11, c12, c13, r0ns_n(0), c21, c22, c23, r0ns_n(1), c31, c32, c33, r0ns_n(2), 0, 0, 0, 1;
 
-  Eigen::Isometry3d measured_to_actual = robot_tool_orientation_calibration_samples_[tool_surface_frame][0].inverse() * Anns;
+  Eigen::Isometry3d measured_to_actual =
+      robot_tool_orientation_calibration_samples_[tool_surface_frame][0].inverse() * Anns;
 
   ROS_INFO_STREAM("Rotation measured_to_actual (y, p, r) is: \n" << measured_to_actual.rotation().eulerAngles(2, 1, 0));
 
   ROS_INFO(" Done !");
-
 
   return true;
 }

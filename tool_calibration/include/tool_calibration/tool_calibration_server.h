@@ -8,7 +8,7 @@
 
 #include <tool_calibration/tool_point_calibration.h>
 
-#include <sss_msgs/GetToolCalibrationSample.h>
+#include <sss_msgs/GetToolCalibration.h>
 #include <tool_calibration/CalibrationUrdfRetrieve.h>
 #include <tool_calibration/CalibrationUrdfUpdate.h>
 
@@ -22,12 +22,14 @@ public:
 private:
   ros::NodeHandle nh_;
 
-  // Variables
-  // TODO: maybe load these from a config. 
-  std::map<std::string, std::string> robot_base_frames_{ { "kr8_r1420_rcb", "base_link" } };
-  uint min_number_of_samples_ = 4;  // Could have different values for different tools for this
+  // Parameters
+  // TODO: add base links of other robots here. Could also load this from parameters / configs
+  std::map<std::string, std::string> robot_base_frames_{ { "kr8_r1420_rcb", "base_link" } }; 
+  std::vector<std::string> reference_orientation_calibration_supported_tools_;
+  reference_orientation_calibration_supported_tools_ = {"kr8_r1420_rcb/welder_tool_surface"};
+  uint min_number_of_samples_ = 4;  
   uint required_number_of_orientation_samples_ = 3;  
-
+ 
   // Map of the robot tool surface being calibrated to the calibration samples for that tool.
   // Stored in memory as the server will be called per point to accommodate running via tasks
   std::map<std::string, tool_point_calibration::Isometry3dVector> robot_tool_calibration_samples_;
@@ -53,8 +55,8 @@ private:
   ros::ServiceClient calibration_urdf_update_client_;
 
   // callback functions
-  bool sampleToolCalibrationSampleCallback(const sss_msgs::GetToolCalibrationSample::Request& req,
-                                           sss_msgs::GetToolCalibrationSample::Response& res);
+  bool toolCalibrationCallback(const sss_msgs::GetToolCalibration::Request& req,
+                                           sss_msgs::GetToolCalibration::Response& res);
 
   // helper functions
   bool calculateUrdfFormatedToolCalibration(const std::string tool_surface_frame);

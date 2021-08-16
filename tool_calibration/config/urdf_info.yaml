@@ -1,3 +1,6 @@
+# config file to specify the file location of the robots urdf calibration values
+# and the name used to the generic calibration variable name
+
 kr8_r1420_rcb/welder_tool_surface:
   file_location: "kuka/kuka_manipulators/kuka_common_support/urdf/kr8_calibration_values.urdf.xacro"
   calibration_value_names:
@@ -18,4 +21,4 @@ kr8_r1420_rcb/2d_laser_calibration_point:
     tool_2D_laser_calibration_point_pitch: 'calibration_pitch'
     tool_2D_laser_calibration_point_yaw: 'calibration_yaw'
 
-# copy above layout for other tool surfaces
+# TODO: copy above layout for other tool surfaces

@@ -35,6 +35,8 @@ class CalibrationUrdfServer:
         self.urdf_info_dict = yaml.load(stream, Loader=yaml.FullLoader)
 
     def update_urdf_cbf(self, req):
+        # service call back function to update the values of the tool surfaces urdf file
+
         rospy.loginfo('Calibration urdf update callback')
 
         response = CalibrationUrdfUpdateResponse()
@@ -67,6 +69,7 @@ class CalibrationUrdfServer:
         return response
 
     def urdf_retrieve_cbf(self, req):
+        # service call back function to retireve the values of the tool surfaces urdf file
         response = CalibrationUrdfRetrieveResponse()
 
         success, urdf_file_location, element_tag_name_to_calibration_value_dict, parsed_dom = self.load_urdf(req.robot_tool_surface)
