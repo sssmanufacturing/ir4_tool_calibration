@@ -59,10 +59,10 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
     - TOOL_POINT_SAMPLES_RESET: resets tool point calibration
     - TOOL_ORIENTATION_SAMPLES_RESET: resets tool orientation calibration
     - CALCULATE_TOOL_POINT_CALIBRATION: calculates tool point calibration
-    - CALCULATE_TOOL_ORIENTATION_CALIBRATION: calculates tool orientation calibration
-    - CALCULATE_ORIENTATION_CALIBRATION_FROM_REFERENCE_OBJECT: calculates tool orientation calibration from a reference
-      object (TODO: Currently calculation not working. This cmd currently does not update the in memory calibration
+    - CALCULATE_TOOL_ORIENTATION_CALIBRATION: calculates tool orientation calibration (TODO: Currently calculation not working. This cmd currently does not update the in memory calibration
   values)
+    - CALCULATE_ORIENTATION_CALIBRATION_FROM_REFERENCE_OBJECT: calculates tool orientation calibration from a reference
+      object 
     - UPDATE_TOOL_URDF: updated the tool calibration urdf file with latest calculated calibration values
   */
 
@@ -164,8 +164,6 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
     calculateRotationFromSamples(tool_surface_frame);
 
     // TODO: sanity check that the new calibration makes sense (i.e. within tolerance)
-
-    touch_point_result_avaliable_[tool_surface_frame] = true;
 
     // caluclate urdf calibration values
     if (!calculateUrdfFormatedToolCalibration(tool_surface_frame))
@@ -279,7 +277,7 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
   {
     if (!touch_point_result_avaliable_[tool_surface_frame])
     {
-      ROS_ERROR_STREAM("No calibration result avaliable. Not updating tool urdf");
+      ROS_ERROR_STREAM("No position calibration result avaliable. Not updating tool urdf");
       res.success = false;
       return false;
     }
@@ -341,6 +339,9 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
     res.success = true;
     return true;
   }
+
+  // handle point sampling commands separately below:
+  
 
   // Create a transform listener to query tool frames. Check if they actually exist
   tf::TransformListener listener;
