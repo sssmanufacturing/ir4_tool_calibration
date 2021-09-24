@@ -188,9 +188,7 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
 
       if (!world_found && !tool_found)
       {
-        ROS_WARN("Check to make sure that a robot state publisher or other node is publishing"
-                 " tf frames for your robot. Also check that your base/tool frames names are"
-                 " correct and not missing a prefix, for example.");
+        ROS_WARN("Check to make sure that a robot state publisher or other node is publishing tf frames for your robot. Also check that your base/tool frames names are correct and not missing a prefix, for example.");
       }
       else if (!world_found)
       {
@@ -223,15 +221,35 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
     // Now use the pose of the reference object and find the difference from the world_to_tip_transform
     tf2::fromMsg(req.reference_object_pose, ref_frame_eigen_pose);
 
-    Eigen::Isometry3d tool_to_ref_eigen = ref_frame_eigen_pose.inverse() * tool_eigen_pose;
+    // 0 out the yaw values for the reference object and tool
+    // Eigen::Isometry3d ref_frame_eigen_pose_tf = ToolCalibrationServer::zeroRotationMatrix(ref_frame_eigen_pose.rotation().eulerAngles(2, 1, 0), ref_frame_eigen_pose.translation(), false, false, true);
+    // Eigen::Isometry3d tool_eigen_pose_tf = ToolCalibrationServer::zeroRotationMatrix(tool_eigen_pose.rotation().eulerAngles(2, 1, 0), tool_eigen_pose.translation(), false, false, true);
 
-    ROS_INFO_STREAM("req.reference_object_pose is: \n" << req.reference_object_pose);
-    ROS_INFO_STREAM("Rotation ref_frame_eigen_pose (y, p, r) is: \n" << ref_frame_eigen_pose.rotation().eulerAngles(2, 1, 0));
-    ROS_INFO_STREAM("Rotation tool_eigen_pose (y, p, r) is: \n" << tool_eigen_pose.rotation().eulerAngles(2, 1, 0));
-    ROS_INFO_STREAM("Rotation tool_to_ref_eigen (y, p, r) is: \n" << tool_to_ref_eigen.rotation().eulerAngles(2, 1, 0));
-    ROS_INFO_STREAM("Translation is: \n" << tool_to_ref_eigen.translation());
+    // Check the yaw values of the frames and adjust as necessary
+    if(tool_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[0] != ref_frame_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[0]) {
+      ROS_WARN("Yaw values for reference and tool unequal, setting them equal");
+      tool_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[0] = ref_frame_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[0];
+    }
 
-    // At this point tool_to_ref_eigen.rotation().eulerAngles(2, 1, 0) = the yaw, pitch, roll that the welder frame is off from reference. Need to adjust tool frame to match reference
+    // Check if roll is not the same, and adjust
+    if((tool_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[2] <= 0.01) || (ref_frame_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[2] <= 0.01)) {
+      tool_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[2] = floor(tool_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[2]);
+      tool_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[2] = floor(tool_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[2]);
+    }
+
+    if((tool_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[2] != ref_frame_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[2])) {
+      ROS_WARN("Roll values for reference and tool unequal, setting them equal");
+      tool_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[2] = ref_frame_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[2];
+    }
+
+    ROS_INFO_STREAM("Reference object pose is given as:\n" << ref_frame_eigen_pose.matrix());
+    ROS_INFO_STREAM("Tool object pose is given as:\n" << tool_eigen_pose.matrix());
+    ROS_INFO_STREAM("RPY of the reference object is: " << ref_frame_eigen_pose.rotation().eulerAngles(2, 1, 0).reverse().transpose());
+    ROS_INFO_STREAM("RPY of the current tool is: " << tool_eigen_pose.rotation().eulerAngles(2, 1, 0).reverse().transpose()); 
+
+    // Find the transform between the reference and tool frames
+    Eigen::Isometry3d tool_to_ref_eigen = ref_frame_eigen_pose.inverse()*tool_eigen_pose;
+    ROS_INFO_STREAM("Final transform is:\n" << tool_to_ref_eigen.matrix());
 
     // Calculate tool orientation calibration result and call service calculate URDF formated values
     if (robot_tool_orientation_calibration_results_.count(tool_surface_frame) == 0)
@@ -241,6 +259,7 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
     }
 
     robot_tool_orientation_calibration_results_[tool_surface_frame] = tool_to_ref_eigen.rotation().eulerAngles(2, 1, 0);
+    ROS_INFO_STREAM("Final orientation results are: " << robot_tool_orientation_calibration_results_[tool_surface_frame].matrix().reverse().transpose());
 
     // Caluclate URDF calibration values
     if (!calculateUrdfFormatedToolCalibration(tool_surface_frame))
@@ -556,7 +575,7 @@ bool ToolCalibrationServer::calculateRotationFromSamples(const std::string tool_
 
   // Save the final result 
   robot_tool_orientation_calibration_results_[tool_surface_frame] = Rot.eulerAngles(2, 1, 0);
-  ROS_INFO_STREAM("Calibration RPY values calculated as: " << robot_tool_orientation_calibration_results_[tool_surface_frame].matrix().transpose().rowwise().reverse());
+  ROS_INFO_STREAM("Calibration RPY values calculated as: " << robot_tool_orientation_calibration_results_[tool_surface_frame].matrix().reverse().transpose());
 
   return true;
 }
