@@ -3,6 +3,7 @@
 #include <ros/ros.h>
 #include <tf_conversions/tf_eigen.h>
 #include <tf2_eigen/tf2_eigen.h>
+#include <tf/tf.h>
 
 // Service node to perform calibration of a tool for the KR8 robotic arm
 
@@ -174,16 +175,16 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
         return false;
       }
 
-    ROS_WARN("Calculating calibration from the robots current pose relative to the given reference object. Not using any saved robot_tool_orientation_calibration_samples_ for this calculation");
+    ROS_WARN("Calculating calibration from the robots current pose relative to the given reference object. Not using any saved orientation calibration samples for this calculation");
 
     // Need listener
     tf::TransformListener listener;
     std::string error_msg;
-    std::string world_frame = "world";
+    std::string reference_frame= "world";
 
-    if (!listener.waitForTransform(world_frame, tool_surface_frame, ros::Time(0), ros::Duration(1.0), ros::Duration(0.01), &error_msg))
+    if (!listener.waitForTransform(reference_frame, tool_surface_frame, ros::Time(0), ros::Duration(1.0), ros::Duration(0.01), &error_msg))
     {
-      bool world_found = listener.frameExists(world_frame);
+      bool world_found = listener.frameExists(reference_frame);
       bool tool_found = listener.frameExists(tool_surface_frame);
 
       if (!world_found && !tool_found)
@@ -192,13 +193,13 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
       }
       else if (!world_found)
       {
-        ROS_WARN("Check to make sure that world frame '%s' actually exists.", base_frame.c_str());
+        ROS_WARN("Check to make sure that world frame '%s' actually exists.", reference_frame.c_str());
       }
       else if (!tool_found)
       {
         ROS_WARN("Check to make sure that tool_surface_frame '%s' actually exists.", tool_surface_frame.c_str());
       }
-      ROS_ERROR_STREAM("");
+      ROS_ERROR("Could not obtain transform. Got error message: %s", error_msg.c_str());
       res.success = false;
       return true;
     }
@@ -207,9 +208,9 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
     tf::StampedTransform world_to_tip_transform;
     try
     {
-      listener.lookupTransform(world_frame, tool_surface_frame, ros::Time(0), world_to_tip_transform);
+      listener.lookupTransform(reference_frame, tool_surface_frame, ros::Time(0), world_to_tip_transform);
       tf::poseTFToEigen(world_to_tip_transform, tool_eigen_pose);
-      ROS_INFO_STREAM("Pose captured transform:\n" << tool_eigen_pose.matrix());
+      // ROS_INFO_STREAM("Pose captured transform:\n" << tool_eigen_pose.matrix());
     }
     catch (const tf::TransformException& ex)
     {
@@ -221,25 +222,14 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
     // Now use the pose of the reference object and find the difference from the world_to_tip_transform
     tf2::fromMsg(req.reference_object_pose, ref_frame_eigen_pose);
 
-    // 0 out the yaw values for the reference object and tool
-    // Eigen::Isometry3d ref_frame_eigen_pose_tf = ToolCalibrationServer::zeroRotationMatrix(ref_frame_eigen_pose.rotation().eulerAngles(2, 1, 0), ref_frame_eigen_pose.translation(), false, false, true);
-    // Eigen::Isometry3d tool_eigen_pose_tf = ToolCalibrationServer::zeroRotationMatrix(tool_eigen_pose.rotation().eulerAngles(2, 1, 0), tool_eigen_pose.translation(), false, false, true);
+    // Check frame rotation and change as needed
+    double ref_yaw = ref_frame_eigen_pose.rotation().eulerAngles(2, 1, 0)[0];
 
-    // Check the yaw values of the frames and adjust as necessary
-    if(tool_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[0] != ref_frame_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[0]) {
-      ROS_WARN("Yaw values for reference and tool unequal, setting them equal");
-      tool_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[0] = ref_frame_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[0];
-    }
-
-    // Check if roll is not the same, and adjust
-    if((tool_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[2] <= 0.01) || (ref_frame_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[2] <= 0.01)) {
-      tool_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[2] = floor(tool_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[2]);
-      tool_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[2] = floor(tool_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[2]);
-    }
-
-    if((tool_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[2] != ref_frame_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[2])) {
-      ROS_WARN("Roll values for reference and tool unequal, setting them equal");
-      tool_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[2] = ref_frame_eigen_pose.rotation().eulerAngles(2, 1, 0).matrix()[2];
+    if(ref_yaw != M_PI) {
+      // Rotate
+      Eigen::Isometry3d ref_frame_rotation;
+      ref_frame_rotation.matrix() << cos(M_PI - ref_yaw), -sin(M_PI - ref_yaw), 0, 0, sin(M_PI - ref_yaw), cos(M_PI - ref_yaw), 0, 0, 0, 0, 1, 0, 0, 0, 0, 1;
+      ref_frame_eigen_pose = ref_frame_eigen_pose*ref_frame_rotation;
     }
 
     ROS_INFO_STREAM("Reference object pose is given as:\n" << ref_frame_eigen_pose.matrix());
@@ -247,9 +237,190 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
     ROS_INFO_STREAM("RPY of the reference object is: " << ref_frame_eigen_pose.rotation().eulerAngles(2, 1, 0).reverse().transpose());
     ROS_INFO_STREAM("RPY of the current tool is: " << tool_eigen_pose.rotation().eulerAngles(2, 1, 0).reverse().transpose()); 
 
-    // Find the transform between the reference and tool frames
-    Eigen::Isometry3d tool_to_ref_eigen = ref_frame_eigen_pose.inverse()*tool_eigen_pose;
-    ROS_INFO_STREAM("Final transform is:\n" << tool_to_ref_eigen.matrix());
+    // Get the transform from the tool frame to the reference frame
+    Eigen::Isometry3d tool_to_ref_transform = tool_eigen_pose.inverse()*ref_frame_eigen_pose;
+
+    // Extract angles from transform
+    double tool_roll = tool_to_ref_transform.rotation().eulerAngles(2, 1, 0)[2];
+    double tool_pitch = tool_to_ref_transform.rotation().eulerAngles(2, 1, 0)[1];
+    double tool_yaw = tool_to_ref_transform.rotation().eulerAngles(2, 1, 0)[0];
+
+    // Sanity check angles to make sure we are applying the correct rotations
+    if(tool_yaw == -M_PI || tool_yaw == M_PI) {
+      ROS_WARN("Zeroing yaw value of %2.4f!", tool_yaw);
+      tool_yaw = 0.0;
+    }
+
+    if(tool_pitch == -M_PI || tool_pitch == M_PI)  {
+      ROS_WARN("Zeroing pitch value of %2.4f!", tool_pitch);
+      tool_pitch = 0.0;
+    }
+
+    if(tool_roll == -M_PI || tool_roll == M_PI)  {
+      ROS_WARN("Zeroing roll value of %2.4f!", tool_roll);
+      tool_roll = 0.0;
+    }
+
+    if(tool_yaw <= -10*M_PI/180) {
+      ROS_WARN("Wrapping yaw rotation %2.4f to be positive", tool_yaw);
+      tool_yaw = tool_yaw + M_PI;
+    }
+
+    if(tool_yaw >= 10*M_PI/180) {
+      ROS_WARN("Wrapping yaw rotation %2.4f to be negative", tool_yaw);
+      tool_yaw = tool_yaw - M_PI;
+    }
+
+    if(tool_pitch <= -10*M_PI/180) {
+      ROS_WARN("Wrapping pitch rotation %2.4f to be positive", tool_pitch);
+      tool_pitch = tool_pitch + M_PI;
+    }
+
+    if(tool_pitch >= 10*M_PI/180) {
+      ROS_WARN("Wrapping pitch rotation %2.4f to be negative", tool_pitch);
+      tool_pitch = tool_pitch - M_PI;
+    }
+
+    if(tool_roll <= -10*M_PI/180) {
+      ROS_WARN("Wrapping roll rotation %2.4f to be positive", tool_roll);
+      tool_roll = tool_roll + M_PI;
+    }
+
+    if(tool_roll >= 10*M_PI/180) {
+      ROS_WARN("Wrapping roll rotation %2.4f to be negative", tool_roll);
+      tool_roll = tool_roll - M_PI;
+    }
+
+    if ((tool_yaw/abs(tool_yaw) == tool_eigen_pose.rotation().eulerAngles(2, 1, 0)[0]/abs(tool_eigen_pose.rotation().eulerAngles(2, 1, 0)[0])) && (tool_eigen_pose.rotation().eulerAngles(2, 1, 0)[0] >= 10*M_PI/180 || tool_eigen_pose.rotation().eulerAngles(2, 1, 0)[0] <= -10*M_PI/180)) {
+      ROS_WARN("Sign of yaw rotation (%2.4f) to apply and tool yaw (%2.4f) are the same, reversing", tool_yaw, tool_eigen_pose.rotation().eulerAngles(2, 1, 0)[0]);
+      tool_yaw = -1*tool_yaw;
+    }
+
+    if ((tool_pitch/abs(tool_pitch) == tool_eigen_pose.rotation().eulerAngles(2, 1, 0)[1]/abs(tool_eigen_pose.rotation().eulerAngles(2, 1, 0)[1])) && (tool_eigen_pose.rotation().eulerAngles(2, 1, 0)[1] >= 10*M_PI/180 || tool_eigen_pose.rotation().eulerAngles(2, 1, 0)[1] <= -10*M_PI/180)) {
+      ROS_WARN("Sign of pitch rotation (%2.4f) to apply and tool pitch (%2.4f) are the same, reversing", tool_pitch, tool_eigen_pose.rotation().eulerAngles(2, 1, 0)[1]);
+      tool_pitch = -1*tool_pitch;
+    }
+    
+    if ((tool_roll/abs(tool_roll) == tool_eigen_pose.rotation().eulerAngles(2, 1, 0)[2]/abs(tool_eigen_pose.rotation().eulerAngles(2, 1, 0)[2])) && (tool_eigen_pose.rotation().eulerAngles(2, 1, 0)[2] >= 10*M_PI/180 || tool_eigen_pose.rotation().eulerAngles(2, 1, 0)[2] <= -10*M_PI/180)) {
+      ROS_WARN("Sign of roll rotation (%2.4f) to apply and tool roll (%2.4f) are the same, reversing", tool_roll, tool_eigen_pose.rotation().eulerAngles(2, 1, 0)[2]);
+      tool_roll = -1*tool_roll;
+    }
+
+    // Apply successive rotations to realign the Z axes of the reference and tool
+    if(tool_yaw < -0.001 || tool_yaw > 0.001) {
+        if(tool_yaw != 0) {
+        // Apply the rotation
+        ROS_INFO("Applying rotation (yaw) of %2.4f about tool Z axis", tool_yaw);
+
+        Eigen::Matrix4d yaw_rot;
+        yaw_rot << cos(tool_yaw), -sin(tool_yaw), 0, 0, sin(tool_yaw), cos(tool_yaw), 0, 0, 0, 0, 1, 0, 0, 0, 0, 1;
+
+        tool_eigen_pose = tool_eigen_pose*yaw_rot;
+
+        ROS_INFO_STREAM("Z rotated tool axes are now:\n" << tool_eigen_pose.matrix());
+        }
+    } else {
+      ROS_INFO("Not applying a rotation about Z axis");
+    }    
+
+    if(tool_pitch < -0.001 || tool_pitch > 0.001) {
+        if(tool_pitch != 0) {
+        // Apply the rotation
+        ROS_INFO("Applying rotation (pitch) of %2.4f about tool Y axis", tool_pitch);
+
+        Eigen::Matrix4d pitch_rot;
+        pitch_rot << cos(tool_pitch), 0, sin(tool_pitch), 0, 0, 1, 0, 0, -sin(tool_pitch), 0, cos(tool_pitch), 0, 0, 0, 0, 1;
+
+        tool_eigen_pose = tool_eigen_pose*pitch_rot;
+
+        ROS_INFO_STREAM("Y rotated tool axes are now:\n" << tool_eigen_pose.matrix());
+        ROS_INFO("Transform now including pitch of %2.4f", tool_pitch);
+        }
+    } else {
+      ROS_INFO("Not applying a rotation about Y axis. Final transform not including any pitch");
+    }
+
+    if(tool_roll < -0.001 || tool_roll > 0.001) {
+        if(tool_roll != 0) {
+        // Apply the rotation
+        ROS_INFO("Applying rotation (roll) of %2.4f about tool X axis", tool_roll);
+
+        Eigen::Matrix4d roll_rot;
+        roll_rot << 1, 0, 0, 0, 0, cos(tool_roll), -sin(tool_roll), 0, 0, sin(tool_roll), cos(tool_roll), 0, 0, 0, 0, 1;
+
+        tool_eigen_pose = tool_eigen_pose*roll_rot;
+
+        ROS_INFO_STREAM("X rotated tool axes are now:\n" << tool_eigen_pose.matrix());
+        ROS_INFO("Transform now including roll of %2.4f", tool_roll);        
+        }
+    } else {
+      ROS_INFO("Not applying a rotation about X axis. Final transform not including any roll");
+    }
+
+    // Sanity check: get transform to verify 
+    if((round(tool_eigen_pose.rotation().eulerAngles(2, 1, 0)[2]) - round(ref_frame_eigen_pose.rotation().eulerAngles(2, 1, 0)[2]) == 0.0) && (round(tool_eigen_pose.rotation().eulerAngles(2, 1, 0)[1]) - round(ref_frame_eigen_pose.rotation().eulerAngles(2, 1, 0)[1]) == 0.0)) {
+      ROS_INFO("Z axes of tool and reference properly aligned");
+    } else {
+      ROS_ERROR("Failed to align Z axes of tool and reference");
+      ROS_INFO("Roll angles of tool frame and reference frame are %2.4f, %2.4f", tool_eigen_pose.rotation().eulerAngles(2, 1, 0)[2], ref_frame_eigen_pose.rotation().eulerAngles(2, 1, 0)[2]);
+      ROS_INFO("Pitch angles of tool frame and reference frame are %2.4f, %2.4f", tool_eigen_pose.rotation().eulerAngles(2, 1, 0)[1], ref_frame_eigen_pose.rotation().eulerAngles(2, 1, 0)[1]);
+    }  
+
+    // Get the transform from the tool to link 6
+    tf::StampedTransform tool_to_link_transform;
+    Eigen::Isometry3d link_6_eigen_pose;
+    
+    try {
+      listener.lookupTransform("kr8_r1420_rcb/link_6", tool_surface_frame, ros::Time::now(), tool_to_link_transform);
+      tf::poseTFToEigen(tool_to_link_transform, link_6_eigen_pose);
+      ROS_INFO("Successfully got transform from tool to link 6");
+      ROS_INFO_STREAM("Transform RPY is: " << link_6_eigen_pose.rotation().eulerAngles(2, 1, 0).reverse().transpose());
+    } catch (const tf::TransformException& ex) {
+      ROS_ERROR("Unable to get transform, got exception: %s", ex.what());
+    }
+
+    // Get the new x vector for the tool frame
+    Eigen::Vector3d x_tool_vec, z_tool_vec, y_link_vec;
+    y_link_vec << link_6_eigen_pose.matrix()(4), link_6_eigen_pose.matrix()(5), link_6_eigen_pose.matrix()(6);
+    z_tool_vec << tool_eigen_pose.matrix()(8), tool_eigen_pose.matrix()(9), tool_eigen_pose.matrix()(10); 
+    ROS_INFO_STREAM("Using y vector from link 6 for cross product of x tool vector: " << -1*y_link_vec.transpose());
+    x_tool_vec = -1*y_link_vec.cross(z_tool_vec);
+    ROS_INFO_STREAM("New x vector for tool is: " << x_tool_vec.transpose());
+    
+    // Use the new x vector to calculate the new y vector for the tool frame
+    Eigen::Vector3d y_tool_vec = z_tool_vec.cross(x_tool_vec);
+    ROS_INFO_STREAM("New y vector for tool is: " << y_tool_vec.transpose());
+
+    // Update the tool pose
+    tool_eigen_pose.matrix()(0) = x_tool_vec[0];
+    tool_eigen_pose.matrix()(1) = x_tool_vec[1];
+    tool_eigen_pose.matrix()(2) = x_tool_vec[2];
+    tool_eigen_pose.matrix()(4) = y_tool_vec[0];
+    tool_eigen_pose.matrix()(5) = y_tool_vec[1];
+    tool_eigen_pose.matrix()(6) = y_tool_vec[2];
+
+    // Sanity check calculations
+    if(tool_pitch < -0.001 || tool_pitch > 0.001) {
+        if(tool_pitch != 0) {
+        // Apply the rotation
+        Eigen::Matrix4d pitch_rot;
+        pitch_rot << cos(-tool_pitch), 0, sin(-tool_pitch), 0, 0, 1, 0, 0, -sin(-tool_pitch), 0, cos(-tool_pitch), 0, 0, 0, 0, 1;
+
+        tool_eigen_pose = tool_eigen_pose*pitch_rot;
+        }
+    }
+
+    if(tool_roll < -0.001 || tool_roll > 0.001) {
+        if(tool_roll != 0) {
+        // Apply the rotation
+        Eigen::Matrix4d roll_rot;
+        roll_rot << 1, 0, 0, 0, 0, cos(-tool_roll), -sin(-tool_roll), 0, 0, sin(-tool_roll), cos(-tool_roll), 0, 0, 0, 0, 1;
+
+        tool_eigen_pose = tool_eigen_pose*roll_rot;
+        }
+    }
+
+    ROS_INFO_STREAM("Final transformation matrix calculated as:\n" << tool_eigen_pose.matrix());
 
     // Calculate tool orientation calibration result and call service calculate URDF formated values
     if (robot_tool_orientation_calibration_results_.count(tool_surface_frame) == 0)
@@ -258,8 +429,16 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
       robot_tool_orientation_calibration_results_[tool_surface_frame] = Eigen::Vector3d();
     }
 
-    robot_tool_orientation_calibration_results_[tool_surface_frame] = tool_to_ref_eigen.rotation().eulerAngles(2, 1, 0);
-    ROS_INFO_STREAM("Final orientation results are: " << robot_tool_orientation_calibration_results_[tool_surface_frame].matrix().reverse().transpose());
+    // Sanity check: yaw should be zeroed out
+    if(tool_yaw != 0.0) {
+      tool_yaw = 0.0;
+    }
+
+    // Final results
+    Eigen::Vector3d res_vec;
+    res_vec << -tool_yaw, -tool_pitch, -tool_roll;
+    robot_tool_orientation_calibration_results_[tool_surface_frame] = res_vec;
+    ROS_INFO_STREAM("Final orientation results are: " << res_vec.reverse().transpose());
 
     // Caluclate URDF calibration values
     if (!calculateUrdfFormatedToolCalibration(tool_surface_frame))
