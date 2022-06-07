@@ -75,11 +75,12 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
   }
 
   // setup general variables
-  std::string base_frame, tool_surface_frame;
+  std::string base_frame, tool_surface_frame, tool_surface_parent_frame;
 
   // setup frames
   base_frame = req.robot_id + '/' + robot_base_frames_[req.robot_id];
   tool_surface_frame = req.robot_id + '/' + req.tool_surface_name;
+  tool_surface_parent_frame = req.robot_id + '/' + req.tool_surface_parent_name;
 
   if (req.service_call_cmd == sss_msgs::GetToolCalibrationRequest::TOOL_POINT_SAMPLES_RESET)
   {
@@ -105,7 +106,7 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
     // calculate tool point calibration result and calculate urdf formated calibration values
     if (robot_tool_calibration_samples_[tool_surface_frame].size() < min_number_of_samples_)
     {
-      ROS_ERROR_STREAM("Must have atleast " << min_number_of_samples_ << " to calculate the calibration result for "
+      ROS_ERROR_STREAM("Must have at least " << min_number_of_samples_ << " to calculate the calibration result for "
                                             << tool_surface_frame);
       res.success = false;
       return true;
@@ -134,7 +135,7 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
     else
     {
       ROS_INFO_STREAM("Successfully calculated the tool calibration for " << tool_surface_frame);
-      ROS_INFO_STREAM("Calibrated tip from expected (meters in xyz): ["
+      ROS_INFO_STREAM("Calibrated tip from tool_surface_parent_frame (meters in xyz): ["
                       << robot_tool_calibration_results_[tool_surface_frame].tcp_offset.transpose() << "]");
       res.success = true;
       return true;
@@ -182,6 +183,8 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
   else if (req.service_call_cmd ==
            sss_msgs::GetToolCalibrationRequest::CALCULATE_ORIENTATION_CALIBRATION_FROM_REFERENCE_OBJECT)
   {
+    //TODO: this needs to be checked and updated
+
     // check if it is a supported tool surface
     if (!(std::count(reference_orientation_calibration_supported_tools_.begin(),
                    reference_orientation_calibration_supported_tools_.end(), tool_surface_frame)))
@@ -346,15 +349,15 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
   // Create a transform listener to query tool frames. Check if they actually exist
   tf::TransformListener listener;
   std::string error_msg;
-  if (!listener.waitForTransform(base_frame, tool_surface_frame, ros::Time(0), ros::Duration(1.0), ros::Duration(0.01),
+  if (!listener.waitForTransform(base_frame, tool_surface_parent_frame, ros::Time(0), ros::Duration(1.0), ros::Duration(0.01),
                                  &error_msg))
   {
-    ROS_WARN_STREAM("Unable to lookup transform between base frame: '" << base_frame << "' and tool frame: '"
-                                                                       << tool_surface_frame
+    ROS_WARN_STREAM("Unable to lookup transform between base frame: '" << base_frame << "' and tool surface parent frame: '"
+                                                                       << tool_surface_parent_frame
                                                                        << "'. TF reported error: " << error_msg);
     bool base_found = listener.frameExists(base_frame);
-    bool tool_found = listener.frameExists(tool_surface_frame);
-    if (!base_found && !tool_found)
+    bool tool_parent_found = listener.frameExists(tool_surface_parent_frame);
+    if (!base_found && !tool_parent_found)
     {
       ROS_WARN("Check to make sure that a robot state publisher or other node is publishing"
                " tf frames for your robot. Also check that your base/tool frames names are"
@@ -364,9 +367,9 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
     {
       ROS_WARN("Check to make sure that base frame '%s' actually exists.", base_frame.c_str());
     }
-    else if (!tool_found)
+    else if (!tool_parent_found)
     {
-      ROS_WARN("Check to make sure that tool_surface_frame '%s' actually exists.", tool_surface_frame.c_str());
+      ROS_WARN("Check to make sure that tool_surface_parent_frame '%s' actually exists.", tool_surface_parent_frame.c_str());
     }
     res.success = false;
     return true;
@@ -377,7 +380,7 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
   tf::StampedTransform transform;
   try
   {
-    listener.lookupTransform(base_frame, tool_surface_frame, ros::Time(0), transform);
+    listener.lookupTransform(base_frame, tool_surface_parent_frame, ros::Time(0), transform);
     tf::poseTFToEigen(transform, eigen_pose);
     ROS_INFO_STREAM("Pose captured transform:\n" << eigen_pose.matrix());
   }
@@ -402,8 +405,8 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
     if (robot_tool_calibration_samples_[tool_surface_frame].size() < 1)
     {
       // first point collected
-      ROS_INFO("Starting tool calibration samples with base frame: '%s' and tool surface frame: '%s'.",
-               base_frame.c_str(), tool_surface_frame.c_str());
+      ROS_INFO("Starting tool calibration samples with base frame: '%s' and tool surface parent frame: '%s'.",
+               base_frame.c_str(), tool_surface_parent_frame.c_str());
     }
 
     robot_tool_calibration_samples_[tool_surface_frame].push_back(eigen_pose);
@@ -487,22 +490,16 @@ bool ToolCalibrationServer::calculateUrdfFormatedToolCalibration(const std::stri
     robot_tool_urdf_formated_calibration_[tool_surface_frame] = tool_calibration;
   }
 
-  tool_calibration.calibration_x = robot_tool_calibration_results_[tool_surface_frame].tcp_offset.transpose()[0] +
-                                   calibration_urdf_retrieve_srv.response.calibration_x;
-  tool_calibration.calibration_y = robot_tool_calibration_results_[tool_surface_frame].tcp_offset.transpose()[1] +
-                                   calibration_urdf_retrieve_srv.response.calibration_y;
-  tool_calibration.calibration_z = robot_tool_calibration_results_[tool_surface_frame].tcp_offset.transpose()[2] +
-                                   calibration_urdf_retrieve_srv.response.calibration_z;
+  tool_calibration.calibration_x = robot_tool_calibration_results_[tool_surface_frame].tcp_offset.transpose()[0];
+  tool_calibration.calibration_y = robot_tool_calibration_results_[tool_surface_frame].tcp_offset.transpose()[1];
+  tool_calibration.calibration_z = robot_tool_calibration_results_[tool_surface_frame].tcp_offset.transpose()[2];
 
   // If orientation result avaliable update
   if (robot_tool_orientation_calibration_results_.count(tool_surface_frame) != 0)
   {
-    tool_calibration.calibration_roll = calibration_urdf_retrieve_srv.response.calibration_roll -
-                                        robot_tool_orientation_calibration_results_[tool_surface_frame](2);
-    tool_calibration.calibration_pitch = calibration_urdf_retrieve_srv.response.calibration_pitch -
-                                         robot_tool_orientation_calibration_results_[tool_surface_frame](1);
-    tool_calibration.calibration_yaw = calibration_urdf_retrieve_srv.response.calibration_yaw -
-                                       robot_tool_orientation_calibration_results_[tool_surface_frame](0);
+    tool_calibration.calibration_roll = robot_tool_orientation_calibration_results_[tool_surface_frame](2);
+    tool_calibration.calibration_pitch = robot_tool_orientation_calibration_results_[tool_surface_frame](1);
+    tool_calibration.calibration_yaw = robot_tool_orientation_calibration_results_[tool_surface_frame](0);
   }
   else
   {

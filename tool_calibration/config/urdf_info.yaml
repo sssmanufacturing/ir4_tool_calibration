@@ -1,7 +1,8 @@
 # config file to specify the file location of the robots urdf calibration values
 # and the name used to the generic calibration variable name
 
-kr8_r1420_rcb/welder_tool_surface:
+#welder
+kr8_r1420_rcb/welder_tool_surface_kuka_cal: 
   file_location: "kuka/kuka_manipulators/kuka_common_support/urdf/kr8_calibration_values.urdf.xacro"
   calibration_value_names:
     welder_tip_x: 'calibration_x'
@@ -11,7 +12,8 @@ kr8_r1420_rcb/welder_tool_surface:
     welder_tip_pitch: 'calibration_pitch'
     welder_tip_yaw: 'calibration_yaw'
 
-kr8_r1420_rcb/2d_laser_calibration_point:
+#2d laser
+kr8_r1420_rcb/2d_laser_surface_kuka_cal:
   file_location: "kuka/kuka_manipulators/kuka_common_support/urdf/kr8_calibration_values.urdf.xacro"
   calibration_value_names:
     laser_2D_x: 'calibration_x'
