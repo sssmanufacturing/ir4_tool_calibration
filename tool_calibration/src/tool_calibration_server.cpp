@@ -304,23 +304,22 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
     calibration_urdf_update_srv.request.calibration_z =
         robot_tool_urdf_formated_calibration_[tool_surface_frame].calibration_z;
 
+    // fill orientation values as well. If orientation was not calibrated, this will be the default value that was already in the urdf file
+    calibration_urdf_update_srv.request.calibration_roll =
+        robot_tool_urdf_formated_calibration_[tool_surface_frame].calibration_roll;
+    calibration_urdf_update_srv.request.calibration_pitch =
+        robot_tool_urdf_formated_calibration_[tool_surface_frame].calibration_pitch;
+    calibration_urdf_update_srv.request.calibration_yaw =
+        robot_tool_urdf_formated_calibration_[tool_surface_frame].calibration_yaw;
+
     if (robot_tool_orientation_calibration_results_.count(tool_surface_frame) == 0)
     {
       ROS_INFO("Not updating the tools orientation");
       calibration_urdf_update_srv.request.orientation_calibrated = false;
-      calibration_urdf_update_srv.request.calibration_roll = 0.0;
-      calibration_urdf_update_srv.request.calibration_pitch = 0.0;
-      calibration_urdf_update_srv.request.calibration_yaw = 0.0;
     }
     else
     {
-      calibration_urdf_update_srv.request.orientation_calibrated = true;
-      calibration_urdf_update_srv.request.calibration_roll =
-          robot_tool_urdf_formated_calibration_[tool_surface_frame].calibration_roll;
-      calibration_urdf_update_srv.request.calibration_pitch =
-          robot_tool_urdf_formated_calibration_[tool_surface_frame].calibration_pitch;
-      calibration_urdf_update_srv.request.calibration_yaw =
-          robot_tool_urdf_formated_calibration_[tool_surface_frame].calibration_yaw;
+      calibration_urdf_update_srv.request.orientation_calibrated = true;      
     }
 
     if (calibration_urdf_update_client_.call(calibration_urdf_update_srv))
