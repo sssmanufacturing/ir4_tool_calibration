@@ -278,12 +278,6 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
   }
   else if (req.service_call_cmd == sss_msgs::GetToolCalibrationRequest::UPDATE_TOOL_URDF)
   {
-    if (!touch_point_result_avaliable_[tool_surface_frame])
-    {
-      ROS_ERROR_STREAM("No position calibration result avaliable. Not updating tool urdf");
-      res.success = false;
-      return false;
-    }
 
     if (robot_tool_urdf_formated_calibration_.count(tool_surface_frame) == 0)
     {
@@ -295,8 +289,8 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
 
     // update the values from the tools urdf
     tool_calibration::CalibrationUrdfUpdate calibration_urdf_update_srv;
-    // fill request
     calibration_urdf_update_srv.request.robot_tool_surface = tool_surface_frame;
+    // fill position values. If position was not calibrated, this will be the default values that was already in the urdf file
     calibration_urdf_update_srv.request.calibration_x =
         robot_tool_urdf_formated_calibration_[tool_surface_frame].calibration_x;
     calibration_urdf_update_srv.request.calibration_y =
@@ -312,14 +306,13 @@ bool ToolCalibrationServer::toolCalibrationCallback(const sss_msgs::GetToolCalib
     calibration_urdf_update_srv.request.calibration_yaw =
         robot_tool_urdf_formated_calibration_[tool_surface_frame].calibration_yaw;
 
-    if (robot_tool_orientation_calibration_results_.count(tool_surface_frame) == 0)
+    if (robot_tool_calibration_results_.count(tool_surface_frame) != 0)
     {
-      ROS_INFO("Not updating the tools orientation");
-      calibration_urdf_update_srv.request.orientation_calibrated = false;
+      ROS_INFO("Updating the tools position");      
     }
-    else
+    if (robot_tool_orientation_calibration_results_.count(tool_surface_frame) != 0)
     {
-      calibration_urdf_update_srv.request.orientation_calibrated = true;      
+      ROS_INFO("Updating the tools orientation");      
     }
 
     if (calibration_urdf_update_client_.call(calibration_urdf_update_srv))
@@ -489,9 +482,20 @@ bool ToolCalibrationServer::calculateUrdfFormatedToolCalibration(const std::stri
     robot_tool_urdf_formated_calibration_[tool_surface_frame] = tool_calibration;
   }
 
-  tool_calibration.calibration_x = robot_tool_calibration_results_[tool_surface_frame].tcp_offset.transpose()[0];
-  tool_calibration.calibration_y = robot_tool_calibration_results_[tool_surface_frame].tcp_offset.transpose()[1];
-  tool_calibration.calibration_z = robot_tool_calibration_results_[tool_surface_frame].tcp_offset.transpose()[2];
+  // If position result available, update
+  if (robot_tool_calibration_results_.count(tool_surface_frame) != 0)
+  {
+    tool_calibration.calibration_x = robot_tool_calibration_results_[tool_surface_frame].tcp_offset.transpose()[0];
+    tool_calibration.calibration_y = robot_tool_calibration_results_[tool_surface_frame].tcp_offset.transpose()[1];
+    tool_calibration.calibration_z = robot_tool_calibration_results_[tool_surface_frame].tcp_offset.transpose()[2];
+  }
+  else
+  {
+    // just set as is
+    tool_calibration.calibration_x = calibration_urdf_retrieve_srv.response.calibration_x;
+    tool_calibration.calibration_y = calibration_urdf_retrieve_srv.response.calibration_y;
+    tool_calibration.calibration_z = calibration_urdf_retrieve_srv.response.calibration_z;
+  }  
 
   // If orientation result avaliable update
   if (robot_tool_orientation_calibration_results_.count(tool_surface_frame) != 0)
@@ -519,12 +523,16 @@ bool ToolCalibrationServer::calculateRotationFromSamples(const std::string tool_
 {
   // Code used from https://github.com/mahmoud-a-ali/tool_point_calibration/tree/orientation
 
+  // Point 0 - reference
+  // Point 0->1 = X axis
+  // Point 0->2 = Y axis (estimated)
+
   // 0 position vector to match the tool surface frame
   Eigen::Vector4d r0ns_n = { 0.0, 0.0, 0.0, 1 };
   // point 1
   Eigen::Vector4d rd_0 = robot_tool_orientation_calibration_samples_[tool_surface_frame][0] * r0ns_n;
   Eigen::Vector4d r0ns_0 = rd_0;
-  //  point 2: calculate delat1 and then c11, c21, c31
+  //  point 2: calculate delat1 and then c11, c21, c31 - X axis
   Eigen::Vector4d V1;  //{ vx, vy, vz, 1};
   V1 = robot_tool_orientation_calibration_samples_[tool_surface_frame][1].inverse() *
        robot_tool_orientation_calibration_samples_[tool_surface_frame][0] *
@@ -536,9 +544,10 @@ bool ToolCalibrationServer::calculateRotationFromSamples(const std::string tool_
   double c11 = term1 / delta1;
   double c21 = term2 / delta1;
   double c31 = term3 / delta1;
-  ROS_INFO_STREAM(" delat1: " << delta1);
-  ROS_INFO_STREAM("c11: " << c11 << ", c21: " << c21 << ", c31: " << c31);
-  //  point 3: calculate delta2 and then c12, c22, c32
+
+  Eigen::Vector3d X_axis (c11, c21, c31);
+
+  //  point 3: calculate delta2 and then c12, c22, c32 - Y axis estimate
   Eigen::Vector4d V2;  //={ vx, vy, vz, 1};
   V2 = robot_tool_orientation_calibration_samples_[tool_surface_frame][2].inverse() *
        robot_tool_orientation_calibration_samples_[tool_surface_frame][0] *
@@ -546,24 +555,28 @@ bool ToolCalibrationServer::calculateRotationFromSamples(const std::string tool_
   term1 = (V2(0) - r0ns_n(0));
   term2 = (V2(1) - r0ns_n(1));
   term3 = (V2(2) - r0ns_n(2));
-  double delta2 = 1 * sqrt(term1 * term1 + term2 * term2 + term3 * term3);
+  double delta2 = -1 * sqrt(term1 * term1 + term2 * term2 + term3 * term3);
   double c12 = term1 / delta2;
   double c22 = term2 / delta2;
   double c32 = term3 / delta2;
-  ROS_INFO_STREAM(" delat2: " << delta2);
-  ROS_INFO_STREAM("c21: " << c21 << " ,c22: " << c22 << ", c32: " << c32);
-  // calculate c31, c32, c33;  c13=k1.c33  && c23=k2.c33
-  double k1 = (c21 * c32 - c22 * c31) / (c11 * c22 - c21 * c12);
-  double k2 = (c12 * c31 - c11 * c31) / (c11 * c22 - c21 * c12);
-  double c33 = sqrt(1 / (1 + k1 * k1 + k2 * k2));
-  double c13 = k1 * c33;
-  double c23 = k2 * c33;
-  ROS_INFO_STREAM("c31: " << c31 << ", c32: " << c32 << ", c33: " << c33);
-  // store rotation matrix and translation
+
+  Eigen::Vector3d Y_axis_estimate (c12, c22, c32);
+
+  // get z axis and then y axis
+  Eigen::Vector3d Z_axis = X_axis.cross(Y_axis_estimate);
+  Eigen::Vector3d Y_axis = Z_axis.cross(X_axis);
+
+  c12 = Y_axis(0);
+  c22 = Y_axis(1);
+  c32 = Y_axis(2);
+
+  double c13 = Z_axis(0);
+  double c23 = Z_axis(1);
+  double c33 = Z_axis(2);
+  
   Eigen::Matrix3d Rot;
   Rot << c11, c12, c13, c21, c22, c23, c31, c32, c33;
   Eigen::Vector3d transl = { r0ns_n(0), r0ns_n(1), r0ns_n(2) };
-  // std::cout<<"Rot_matrix:\n "<< Rot <<std::endl;
   ROS_INFO_STREAM("Rot_matrix:\n " << Rot);
   ROS_INFO_STREAM("translation:\n " << transl);
   // build final transformation
@@ -571,10 +584,8 @@ bool ToolCalibrationServer::calculateRotationFromSamples(const std::string tool_
   Eigen::Isometry3d Anns;
   Anns.matrix() << c11, c12, c13, r0ns_n(0), c21, c22, c23, r0ns_n(1), c31, c32, c33, r0ns_n(2), 0, 0, 0, 1;
 
-  Eigen::Isometry3d measured_to_actual =
-      robot_tool_orientation_calibration_samples_[tool_surface_frame][0].inverse() * Anns;
-
-  ROS_INFO_STREAM("Rotation measured_to_actual (y, p, r) is: \n" << measured_to_actual.rotation().eulerAngles(2, 1, 0));
+  ROS_INFO_STREAM("Rotation (y, p, r) is: \n" << Anns.rotation().eulerAngles(2, 1, 0));
+  robot_tool_orientation_calibration_results_[tool_surface_frame] = Anns.rotation().eulerAngles(2,1,0);
 
   ROS_INFO(" Done !");
 

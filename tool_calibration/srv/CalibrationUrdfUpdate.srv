@@ -1,5 +1,4 @@
 string robot_tool_surface				# name of the robot tool surface that calibration values should be updated for
-bool orientation_calibrated				# flag to indicate if the orientation was calibrated
 float64 calibration_x					# the tool x value to update the urdf to
 float64 calibration_y					# the tool y value to update the urdf to
 float64 calibration_z					# the tool z value to update the urdf to
